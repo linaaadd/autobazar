@@ -56,8 +56,90 @@ SEARCH_MAKE, SEARCH_MODEL, SEARCH_PRICE_MAX = range(20, 23)
 FUEL_TYPES = ["Бензин", "Дизель", "Гибрид", "Электро", "Газ/Бензин"]
 TRANSMISSION_TYPES = ["Автомат", "Механика", "Робот", "Вариатор"]
 
+POPULAR_MAKES = [
+    "Toyota", "BMW", "Mercedes", "Volkswagen",
+    "Audi", "Ford", "Škoda", "Opel",
+    "Hyundai", "Kia", "Volvo", "Renault",
+    "Peugeot", "Honda", "Nissan", "Mazda",
+]
+NL_CITIES = [
+    "Amsterdam", "Rotterdam", "Utrecht", "Den Haag",
+    "Eindhoven", "Tilburg", "Groningen", "Almere",
+    "Breda", "Nijmegen", "Arnhem", "Haarlem",
+    "Zaandam", "Amersfoort", "Apeldoorn", "Hoofddorp",
+]
+PRICE_PRESETS = [5000, 10000, 15000, 20000, 30000, 50000]
+
 
 # ====== КЛАВИАТУРЫ ======
+
+# === НОВОЕ: make_keyboard ===
+def make_keyboard() -> InlineKeyboardMarkup:
+    rows = []
+    for i in range(0, len(POPULAR_MAKES), 2):
+        pair = POPULAR_MAKES[i:i + 2]
+        rows.append([
+            InlineKeyboardButton(brand, callback_data=f"make_{brand}")
+            for brand in pair
+        ])
+    rows.append([InlineKeyboardButton("✏️ Другая марка", callback_data="make_other")])
+    return InlineKeyboardMarkup(rows)
+
+
+# === НОВОЕ: year_keyboard ===
+def year_keyboard() -> InlineKeyboardMarkup:
+    current_year = datetime.now().year
+    years = list(range(current_year, 2009, -1))
+    rows = []
+    for i in range(0, len(years), 3):
+        chunk = years[i:i + 3]
+        rows.append([
+            InlineKeyboardButton(str(y), callback_data=f"year_{y}")
+            for y in chunk
+        ])
+    rows.append([InlineKeyboardButton("✏️ Другой год", callback_data="year_other")])
+    return InlineKeyboardMarkup(rows)
+
+
+# === НОВОЕ: city_keyboard ===
+def city_keyboard() -> InlineKeyboardMarkup:
+    rows = []
+    for i in range(0, len(NL_CITIES), 2):
+        pair = NL_CITIES[i:i + 2]
+        rows.append([
+            InlineKeyboardButton(city, callback_data=f"city_{city}")
+            for city in pair
+        ])
+    rows.append([InlineKeyboardButton("✏️ Другой город", callback_data="city_other")])
+    return InlineKeyboardMarkup(rows)
+
+
+def search_make_keyboard() -> InlineKeyboardMarkup:
+    rows = []
+    for i in range(0, len(POPULAR_MAKES), 2):
+        pair = POPULAR_MAKES[i:i + 2]
+        rows.append([InlineKeyboardButton(b, callback_data=f"smake_{b}") for b in pair])
+    rows.append([InlineKeyboardButton("🔍 Любая марка", callback_data="smake_any")])
+    rows.append([InlineKeyboardButton("✏️ Ввести вручную", callback_data="smake_other")])
+    return InlineKeyboardMarkup(rows)
+
+
+def search_skip_keyboard(field: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([[InlineKeyboardButton("⏭ Пропустить", callback_data=f"sskip_{field}")]])
+
+
+def search_price_keyboard() -> InlineKeyboardMarkup:
+    rows = []
+    for i in range(0, len(PRICE_PRESETS), 2):
+        pair = PRICE_PRESETS[i:i + 2]
+        rows.append([
+            InlineKeyboardButton(f"< {p:,} €".replace(",", " "), callback_data=f"sprice_{p}")
+            for p in pair
+        ])
+    rows.append([InlineKeyboardButton("💶 Любая цена", callback_data="sprice_any")])
+    rows.append([InlineKeyboardButton("✏️ Ввести вручную", callback_data="sprice_other")])
+    return InlineKeyboardMarkup(rows)
+
 
 def main_menu_keyboard():
     return InlineKeyboardMarkup([
@@ -194,6 +276,7 @@ async def go_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ====== ПОДАЧА ОБЪЯВЛЕНИЯ ======
 
+# === ИЗМЕНЕНО: new_listing_start ===
 async def new_listing_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -202,11 +285,29 @@ async def new_listing_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["username"] = query.from_user.username
     await query.edit_message_text(
         "📝 <b>Подача объявления</b>\n\n"
-        "Шаг 1 из 10 — Марка автомобиля\n"
-        "<i>Например: Toyota, BMW, Volkswagen</i>",
+        "Шаг 1 из 10 — Марка автомобиля",
         parse_mode="HTML",
+        reply_markup=make_keyboard(),
     )
     return ASK_MAKE
+
+
+# === НОВОЕ: got_make_button ===
+async def got_make_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    if query.data == "make_other":
+        await query.message.reply_text("✏️ Введите марку:")
+        return ASK_MAKE
+    brand = query.data.replace("make_", "", 1)
+    context.user_data["make"] = brand
+    await query.message.reply_text(
+        f"✅ Марка: <b>{brand}</b>\n\n"
+        "Шаг 2 из 10 — Модель\n"
+        "<i>Например: Camry, X5, Golf</i>",
+        parse_mode="HTML",
+    )
+    return ASK_MODEL
 
 
 async def ask_model(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -220,15 +321,34 @@ async def ask_model(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ASK_MODEL
 
 
+# === ИЗМЕНЕНО: ask_year ===
 async def ask_year(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["model"] = update.message.text.strip()
     await update.message.reply_text(
         f"✅ Модель: <b>{context.user_data['model']}</b>\n\n"
-        "Шаг 3 из 10 — Год выпуска\n"
-        "<i>Например: 2020</i>",
+        "Шаг 3 из 10 — Год выпуска",
         parse_mode="HTML",
+        reply_markup=year_keyboard(),
     )
     return ASK_YEAR
+
+
+# === НОВОЕ: got_year_button ===
+async def got_year_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    if query.data == "year_other":
+        await query.message.reply_text("✏️ Введите год:")
+        return ASK_YEAR
+    year = int(query.data.replace("year_", "", 1))
+    context.user_data["year"] = year
+    await query.message.reply_text(
+        f"✅ Год: <b>{year}</b>\n\n"
+        "Шаг 4 из 10 — Пробег (км)\n"
+        "<i>Например: 85000</i>",
+        parse_mode="HTML",
+    )
+    return ASK_MILEAGE
 
 
 async def ask_mileage(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -290,17 +410,37 @@ async def ask_transmission(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ASK_TRANSMISSION
 
 
+# === ИЗМЕНЕНО: ask_city ===
 async def ask_city(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     context.user_data["transmission"] = query.data.replace("tr_", "")
     await query.edit_message_text(
         f"✅ КПП: <b>{context.user_data['transmission']}</b>\n\n"
-        "Шаг 8 из 10 — Город\n"
-        "<i>Например: Amsterdam, Rotterdam, Utrecht</i>",
+        "Шаг 8 из 10 — Город",
         parse_mode="HTML",
+        reply_markup=city_keyboard(),
     )
     return ASK_CITY
+
+
+# === НОВОЕ: got_city_button ===
+async def got_city_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    if query.data == "city_other":
+        await query.message.reply_text("✏️ Введите город:")
+        return ASK_CITY
+    city = query.data.replace("city_", "", 1)
+    context.user_data["city"] = city
+    await query.message.reply_text(
+        f"✅ Город: <b>{city}</b>\n\n"
+        "Шаг 9 из 10 — Номер телефона\n"
+        "<i>Например: +31612345678</i>\n"
+        "<i>Нужен для связи, если ваш аккаунт приватный</i>",
+        parse_mode="HTML",
+    )
+    return ASK_PHONE
 
 
 async def ask_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -613,12 +753,32 @@ async def search_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     context.user_data["search"] = {}
     await query.edit_message_text(
-        "🔍 <b>Поиск автомобиля</b>\n\n"
-        "Шаг 1 — Марка\n"
-        "<i>Введите марку или «любая» для пропуска</i>",
+        "🔍 <b>Поиск автомобиля</b>\n\nШаг 1 — Марка",
         parse_mode="HTML",
+        reply_markup=search_make_keyboard(),
     )
     return SEARCH_MAKE
+
+
+async def search_make_btn(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    if data == "smake_any":
+        context.user_data["search"] = {}
+    elif data == "smake_other":
+        await query.edit_message_text("✏️ Введите марку:")
+        return SEARCH_MAKE
+    else:
+        context.user_data["search"]["make"] = data.removeprefix("smake_")
+    brand = context.user_data["search"].get("make", "")
+    prefix = f"✅ Марка: <b>{brand}</b>\n\n" if brand else ""
+    await query.edit_message_text(
+        f"{prefix}Шаг 2 — Модель\n<i>Или пропустите</i>",
+        parse_mode="HTML",
+        reply_markup=search_skip_keyboard("model"),
+    )
+    return SEARCH_MODEL
 
 
 async def search_got_make(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -626,10 +786,24 @@ async def search_got_make(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if text.lower() not in ("любая", "любой", "-", "all", "any"):
         context.user_data["search"]["make"] = text
     await update.message.reply_text(
-        "Шаг 2 — Модель\n<i>Введите модель или «любая»</i>",
+        "Шаг 2 — Модель\n<i>Или пропустите</i>",
         parse_mode="HTML",
+        reply_markup=search_skip_keyboard("model"),
     )
     return SEARCH_MODEL
+
+
+async def search_skip_btn(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    if query.data == "sskip_model":
+        await query.edit_message_text(
+            "Шаг 3 — Максимальная цена (EUR)",
+            parse_mode="HTML",
+            reply_markup=search_price_keyboard(),
+        )
+        return SEARCH_PRICE_MAX
+    return ConversationHandler.END
 
 
 async def search_got_model(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -637,36 +811,54 @@ async def search_got_model(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if text.lower() not in ("любая", "любой", "-", "all", "any"):
         context.user_data["search"]["model"] = text
     await update.message.reply_text(
-        "Шаг 3 — Максимальная цена (EUR)\n<i>Введите число или «любая»</i>",
+        "Шаг 3 — Максимальная цена (EUR)",
         parse_mode="HTML",
+        reply_markup=search_price_keyboard(),
     )
     return SEARCH_PRICE_MAX
+
+
+async def search_price_btn(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    if data == "sprice_other":
+        await query.edit_message_text("✏️ Введите максимальную цену (EUR):")
+        return SEARCH_PRICE_MAX
+    if data != "sprice_any":
+        context.user_data["search"]["price_max"] = int(data.removeprefix("sprice_"))
+    await query.edit_message_text("⏳ Ищу...")
+    return await _run_search(update, context)
 
 
 async def search_execute(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip().replace(" ", "").replace(",", "")
     if text.isdigit():
         context.user_data["search"]["price_max"] = int(text)
+    return await _run_search(update, context)
+
+
+async def _run_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.callback_query:
+        reply = update.callback_query.message.reply_text
+        reply_photo = update.callback_query.message.reply_photo
+    else:
+        reply = update.message.reply_text
+        reply_photo = update.message.reply_photo
 
     s = context.user_data.get("search", {})
     results = await search_listings(
-        make=s.get("make"),
-        model=s.get("model"),
-        price_max=s.get("price_max"),
+        make=s.get("make"), model=s.get("model"), price_max=s.get("price_max"),
     )
-
+    nav = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔍 Новый поиск", callback_data="search")],
+        [InlineKeyboardButton("🏠 Меню", callback_data="main_menu")],
+    ])
     if not results:
-        await update.message.reply_text(
-            "😔 По вашему запросу ничего не найдено.",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔍 Новый поиск", callback_data="search")],
-                [InlineKeyboardButton("🏠 Меню", callback_data="main_menu")],
-            ]),
-        )
+        await reply("😔 По вашему запросу ничего не найдено.", reply_markup=nav)
         return ConversationHandler.END
 
-    await update.message.reply_text(f"🔍 Найдено: <b>{len(results)}</b>", parse_mode="HTML")
-
+    await reply(f"🔍 Найдено: <b>{len(results)}</b>", parse_mode="HTML")
     for item in results[:10]:
         text = (
             f"🚗 <b>{item['make']} {item['model']} {item['year']}</b>\n"
@@ -677,17 +869,11 @@ async def search_execute(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         photos = json.loads(item["photo_ids"])
         try:
-            await update.message.reply_photo(photo=photos[0], caption=text, parse_mode="HTML")
+            await reply_photo(photo=photos[0], caption=text, parse_mode="HTML")
         except Exception:
-            await update.message.reply_text(text, parse_mode="HTML")
+            await reply(text, parse_mode="HTML")
 
-    await update.message.reply_text(
-        "Хотите выполнить новый поиск?",
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔍 Новый поиск", callback_data="search")],
-            [InlineKeyboardButton("🏠 Меню", callback_data="main_menu")],
-        ]),
-    )
+    await reply("Хотите выполнить новый поиск?", reply_markup=nav)
     return ConversationHandler.END
 
 
@@ -777,15 +963,25 @@ def main():
 
     listing_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(new_listing_start, pattern="^new_listing$")],
+        # === ИЗМЕНЕНО: states listing_conv ===
         states={
-            ASK_MAKE:         [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_model)],
+            ASK_MAKE: [
+                CallbackQueryHandler(got_make_button, pattern="^make_"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, ask_model),
+            ],
             ASK_MODEL:        [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_year)],
-            ASK_YEAR:         [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_mileage)],
+            ASK_YEAR: [
+                CallbackQueryHandler(got_year_button, pattern="^year_"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, ask_mileage),
+            ],
             ASK_MILEAGE:      [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_price)],
             ASK_PRICE:        [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_fuel)],
             ASK_FUEL:         [CallbackQueryHandler(ask_transmission, pattern="^fuel_")],
             ASK_TRANSMISSION: [CallbackQueryHandler(ask_city, pattern="^tr_")],
-            ASK_CITY:         [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_phone)],
+            ASK_CITY: [
+                CallbackQueryHandler(got_city_button, pattern="^city_"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, ask_phone),
+            ],
             ASK_PHONE:        [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_description)],
             ASK_DESCRIPTION:  [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_photos)],
             ASK_PHOTOS: [
@@ -805,9 +1001,18 @@ def main():
     search_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(search_start, pattern="^search$")],
         states={
-            SEARCH_MAKE:      [MessageHandler(filters.TEXT & ~filters.COMMAND, search_got_make)],
-            SEARCH_MODEL:     [MessageHandler(filters.TEXT & ~filters.COMMAND, search_got_model)],
-            SEARCH_PRICE_MAX: [MessageHandler(filters.TEXT & ~filters.COMMAND, search_execute)],
+            SEARCH_MAKE: [
+                CallbackQueryHandler(search_make_btn, pattern="^smake_"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, search_got_make),
+            ],
+            SEARCH_MODEL: [
+                CallbackQueryHandler(search_skip_btn, pattern="^sskip_"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, search_got_model),
+            ],
+            SEARCH_PRICE_MAX: [
+                CallbackQueryHandler(search_price_btn, pattern="^sprice_"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, search_execute),
+            ],
         },
         fallbacks=[CommandHandler("cancel", search_cancel)],
         per_message=False,
