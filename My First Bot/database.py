@@ -1,13 +1,15 @@
 import json
+import os
 from datetime import datetime, timedelta
 from typing import Optional
 
 import aiosqlite
 
-DB_PATH = "autobazar.db"
+DB_PATH = os.environ.get("DB_PATH", "/data/autobazar.db")
 
 
 async def init_db():
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("""
             CREATE TABLE IF NOT EXISTS listings (
