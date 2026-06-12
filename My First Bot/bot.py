@@ -2,7 +2,7 @@ import json
 import logging
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, time as dt_time
 
 import anthropic
 from dotenv import load_dotenv
@@ -21,6 +21,7 @@ from database import (
     create_listing,
     delete_listing,
     extend_listing,
+    get_expired_listings,
     get_listing,
     get_user_listings,
     init_db,
@@ -37,7 +38,6 @@ CHANNEL_ID = os.getenv("CHANNEL_ID")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-# Проверка обязательных переменных окружения
 _missing = [v for v in ("TELEGRAM_TOKEN", "ANTHROPIC_API_KEY", "CHANNEL_ID") if not os.getenv(v)]
 if _missing:
     logger.critical(f"Отсутствуют переменные окружения: {', '.join(_missing)}")
@@ -46,7 +46,7 @@ if _missing:
 # ====== СОСТОЯНИЯ ДИАЛОГА: подача объявления ======
 (
     ASK_MAKE, ASK_MODEL, ASK_YEAR, ASK_MILEAGE, ASK_PRICE,
-    ASK_FUEL, ASK_TRANSMISSION, ASK_COLOR, ASK_CITY,
+    ASK_FUEL, ASK_TRANSMISSION, ASK_CITY, ASK_PHONE,
     ASK_DESCRIPTION, ASK_PHOTOS, CONFIRM,
 ) = range(12)
 
@@ -88,25 +88,29 @@ def photos_keyboard(count: int):
 
 # ====== ФОРМАТИРОВАНИЕ ОБЪЯВЛЕНИЯ ======
 
+def _contact(listing: dict) -> str:
+    if listing.get("username"):
+        return f"@{listing['username']}"
+    return listing.get("phone") or "—"
+
+
 def listing_caption(listing: dict) -> str:
     expires = datetime.fromisoformat(listing["expires_at"]).strftime("%d.%m.%Y")
-    contact = f"@{listing['username']}" if listing.get("username") else "—"
     return (
         f"🚗 <b>{listing['make']} {listing['model']} {listing['year']}</b>\n"
         f"💶 <b>{listing['price']:,} {listing['currency']}</b>\n\n"
         f"📍 {listing['city']}\n"
         f"🛣 {listing['mileage']:,} км\n"
-        f"⛽ {listing['fuel']}  |  ⚙️ {listing['transmission']}\n"
-        f"🎨 {listing['color']}\n\n"
+        f"⛽ {listing['fuel']}  |  ⚙️ {listing['transmission']}\n\n"
         f"📝 {listing['description']}\n\n"
-        f"👤 Продавец: {contact}\n"
-        f"📅 Активно до: {expires}\n"
-        f"🆔 #авто{listing['id']}"
+        f"📞 Контакт: {_contact(listing)}\n"
+        f"📅 Активно до: {expires}"
     )
 
 
 def listing_preview(d: dict, photo_count: int, ai_improved: bool = False) -> str:
     tag = " <i>(AI улучшено)</i>" if ai_improved else ""
+    contact = f"@{d['username']}" if d.get("username") else d.get("phone") or "—"
     return (
         f"📋 <b>Предпросмотр объявления</b>{tag}\n\n"
         f"🚗 {d['make']} {d['model']} {d['year']}\n"
@@ -114,8 +118,8 @@ def listing_preview(d: dict, photo_count: int, ai_improved: bool = False) -> str
         f"📍 {d['city']}\n"
         f"🛣 {d['mileage']:,} км\n"
         f"⛽ {d['fuel']}  |  ⚙️ {d['transmission']}\n"
-        f"🎨 {d['color']}\n"
         f"📸 Фото: {photo_count}\n\n"
+        f"📞 Контакт: {contact}\n\n"
         f"📝 {d['description']}"
     )
 
@@ -171,7 +175,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     name = update.effective_user.first_name
     await update.message.reply_text(
         f"👋 Привет, {name}!\n\n"
-        "Добро пожаловать в <b>AutoBazar</b> — маркетплейс автомобилей.\n\n"
+        "Добро пожаловать в <b>AutoBazar NL</b> — маркетплейс автомобилей.\n\n"
         "Здесь вы можете:\n"
         "• 📝 Подать объявление о продаже\n"
         "• 🔍 Найти нужный автомобиль\n"
@@ -195,6 +199,7 @@ async def new_listing_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     context.user_data.clear()
     context.user_data["photos"] = []
+    context.user_data["username"] = query.from_user.username
     await query.edit_message_text(
         "📝 <b>Подача объявления</b>\n\n"
         "Шаг 1 из 10 — Марка автомобиля\n"
@@ -285,34 +290,35 @@ async def ask_transmission(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ASK_TRANSMISSION
 
 
-async def ask_color(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def ask_city(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     context.user_data["transmission"] = query.data.replace("tr_", "")
     await query.edit_message_text(
         f"✅ КПП: <b>{context.user_data['transmission']}</b>\n\n"
-        "Шаг 8 из 10 — Цвет\n"
-        "<i>Например: Чёрный, Белый, Серебристый</i>",
-        parse_mode="HTML",
-    )
-    return ASK_COLOR
-
-
-async def ask_city(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["color"] = update.message.text.strip()
-    await update.message.reply_text(
-        f"✅ Цвет: <b>{context.user_data['color']}</b>\n\n"
-        "Шаг 9 из 10 — Город\n"
+        "Шаг 8 из 10 — Город\n"
         "<i>Например: Amsterdam, Rotterdam, Utrecht</i>",
         parse_mode="HTML",
     )
     return ASK_CITY
 
 
-async def ask_description(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def ask_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["city"] = update.message.text.strip()
     await update.message.reply_text(
         f"✅ Город: <b>{context.user_data['city']}</b>\n\n"
+        "Шаг 9 из 10 — Номер телефона\n"
+        "<i>Например: +31612345678</i>\n"
+        "<i>Нужен для связи, если ваш аккаунт приватный</i>",
+        parse_mode="HTML",
+    )
+    return ASK_PHONE
+
+
+async def ask_description(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["phone"] = update.message.text.strip()
+    await update.message.reply_text(
+        f"✅ Телефон: <b>{context.user_data['phone']}</b>\n\n"
         "Шаг 10 из 10 — Описание\n"
         "Расскажите о состоянии, комплектации, особенностях.\n"
         "<i>Минимум 20 символов</i>",
@@ -338,6 +344,17 @@ async def ask_photos(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ASK_PHOTOS
 
 
+async def _send_photo_ack(context: ContextTypes.DEFAULT_TYPE):
+    data = context.job.data
+    user_data = context.application.user_data.get(data["user_id"], {})
+    count = len(user_data.get("photos", []))
+    await context.bot.send_message(
+        chat_id=data["chat_id"],
+        text=f"📸 Добавлено {count}/10",
+        reply_markup=photos_keyboard(count),
+    )
+
+
 async def collect_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     photos = context.user_data.setdefault("photos", [])
     if len(photos) >= 10:
@@ -347,10 +364,21 @@ async def collect_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return ASK_PHOTOS
     photos.append(update.message.photo[-1].file_id)
-    await update.message.reply_text(
-        f"📸 Добавлено {len(photos)}/10",
-        reply_markup=photos_keyboard(len(photos)),
-    )
+    if update.message.media_group_id:
+        # Debounce: cancel pending ack, schedule one reply for the whole group
+        for job in context.job_queue.get_jobs_by_name(f"photo_ack_{update.effective_user.id}"):
+            job.schedule_removal()
+        context.job_queue.run_once(
+            _send_photo_ack,
+            when=1.5,
+            data={"chat_id": update.effective_chat.id, "user_id": update.effective_user.id},
+            name=f"photo_ack_{update.effective_user.id}",
+        )
+    else:
+        await update.message.reply_text(
+            f"📸 Добавлено {len(photos)}/10",
+            reply_markup=photos_keyboard(len(photos)),
+        )
     return ASK_PHOTOS
 
 
@@ -391,7 +419,6 @@ async def improve_with_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     f"Пробег: {d['mileage']:,} км\n"
                     f"Топливо: {d['fuel']}\n"
                     f"КПП: {d['transmission']}\n"
-                    f"Цвет: {d['color']}\n"
                     f"Город: {d['city']}\n"
                     f"Исходное описание продавца: {d['description']}\n\n"
                     "Напиши только текст описания (2–4 предложения). "
@@ -422,6 +449,7 @@ async def publish_listing(update: Update, context: ContextTypes.DEFAULT_TYPE):
     listing_id = await create_listing({
         "user_id": user.id,
         "username": user.username,
+        "phone": d.get("phone", ""),
         "make": d["make"],
         "model": d["model"],
         "year": d["year"],
@@ -430,7 +458,6 @@ async def publish_listing(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "currency": d.get("currency", "EUR"),
         "fuel": d["fuel"],
         "transmission": d["transmission"],
-        "color": d["color"],
         "city": d["city"],
         "description": d["description"],
         "photo_ids": d["photos"],
@@ -442,7 +469,7 @@ async def publish_listing(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     expires = datetime.fromisoformat(listing["expires_at"]).strftime("%d.%m.%Y")
     await query.edit_message_text(
-        f"✅ <b>Объявление #{listing_id} опубликовано!</b>\n\n"
+        f"✅ <b>Объявление опубликовано!</b>\n\n"
         f"🚗 {d['make']} {d['model']} {d['year']}\n"
         f"📅 Активно до: {expires}\n\n"
         f"Продлить или удалить можно в «Мои объявления».",
@@ -491,15 +518,15 @@ async def my_listings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = "📋 <b>Ваши объявления:</b>\n\n"
     keyboard = []
 
-    for l in items:
-        expires = datetime.fromisoformat(l["expires_at"])
+    for item in items:
+        expires = datetime.fromisoformat(item["expires_at"])
         days_left = (expires - now).days
-        icon = "✅" if l["status"] == "active" and days_left >= 0 else "⏰"
+        icon = "✅" if item["status"] == "active" and days_left >= 0 else "⏰"
         status_str = f"ещё {days_left} дн." if days_left >= 0 else "истекло"
-        text += f"{icon} <b>#{l['id']}</b> — {l['make']} {l['model']} {l['year']} — {l['price']:,} EUR ({status_str})\n"
+        text += f"{icon} <b>#{item['id']}</b> — {item['make']} {item['model']} {item['year']} — {item['price']:,} EUR ({status_str})\n"
         keyboard.append([
-            InlineKeyboardButton(f"🔄 Продлить #{l['id']}", callback_data=f"extend_{l['id']}"),
-            InlineKeyboardButton(f"🗑 #{l['id']}", callback_data=f"del_{l['id']}"),
+            InlineKeyboardButton(f"🔄 Продлить #{item['id']}", callback_data=f"extend_{item['id']}"),
+            InlineKeyboardButton(f"🗑 #{item['id']}", callback_data=f"del_{item['id']}"),
         ])
 
     keyboard.append([InlineKeyboardButton("🏠 Меню", callback_data="main_menu")])
@@ -640,16 +667,15 @@ async def search_execute(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(f"🔍 Найдено: <b>{len(results)}</b>", parse_mode="HTML")
 
-    for l in results[:10]:
-        contact = f"@{l['username']}" if l.get("username") else "—"
+    for item in results[:10]:
         text = (
-            f"🚗 <b>{l['make']} {l['model']} {l['year']}</b>\n"
-            f"💶 <b>{l['price']:,} EUR</b>  |  🛣 {l['mileage']:,} км\n"
-            f"⛽ {l['fuel']}  |  ⚙️ {l['transmission']}\n"
-            f"🎨 {l['color']}  |  📍 {l['city']}\n"
-            f"👤 {contact}  |  🆔 #авто{l['id']}"
+            f"🚗 <b>{item['make']} {item['model']} {item['year']}</b>\n"
+            f"💶 <b>{item['price']:,} EUR</b>  |  🛣 {item['mileage']:,} км\n"
+            f"⛽ {item['fuel']}  |  ⚙️ {item['transmission']}\n"
+            f"📍 {item['city']}\n"
+            f"📞 {_contact(item)}"
         )
-        photos = json.loads(l["photo_ids"])
+        photos = json.loads(item["photo_ids"])
         try:
             await update.message.reply_photo(photo=photos[0], caption=text, parse_mode="HTML")
         except Exception:
@@ -670,11 +696,80 @@ async def search_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
+# ====== АДМИНИСТРАТИВНЫЕ КОМАНДЫ ======
+
+async def post_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        member = await context.bot.get_chat_member(CHANNEL_ID, update.effective_user.id)
+        if member.status not in ("administrator", "creator"):
+            await update.message.reply_text("❌ Только администраторы канала могут это делать.")
+            return
+    except Exception:
+        pass
+
+    text = (
+        "🚗 <b>AutoBazar NL — авто в Нидерландах!</b>\n\n"
+        "Покупайте и продавайте автомобили без посредников.\n\n"
+        "✅ Бесплатные объявления\n"
+        "📸 До 10 фото на объявление\n"
+        "🤖 AI улучшение описания\n"
+        "⏱ Подача за 2 минуты\n\n"
+        "👇 Нажмите кнопку чтобы подать объявление:"
+    )
+    keyboard = InlineKeyboardMarkup([[
+        InlineKeyboardButton("📝 Подать объявление", url="https://t.me/autobazar_nl_bot")
+    ]])
+    msg = await context.bot.send_message(
+        chat_id=CHANNEL_ID,
+        text=text,
+        parse_mode="HTML",
+        reply_markup=keyboard,
+    )
+    try:
+        await context.bot.pin_chat_message(
+            chat_id=CHANNEL_ID,
+            message_id=msg.message_id,
+            disable_notification=True,
+        )
+    except Exception as e:
+        logger.warning(f"Не удалось закрепить пост: {e}")
+    await update.message.reply_text("✅ Приветственный пост опубликован и закреплён в канале!")
+
+
+# ====== ФОНОВЫЕ ЗАДАЧИ ======
+
+async def daily_repost(context: ContextTypes.DEFAULT_TYPE):
+    listings = await search_listings()
+    count = 0
+    for listing in listings:
+        old_ids = json.loads(listing.get("channel_message_ids") or "[]")
+        await delete_from_channel(context, old_ids)
+        msg_ids = await post_to_channel(context, listing)
+        if msg_ids:
+            await update_listing_channel_msgs(listing["id"], msg_ids)
+            count += 1
+    logger.info(f"Ежедневный репост: {count} объявлений переопубликовано")
+
+
+async def cleanup_expired(context: ContextTypes.DEFAULT_TYPE):
+    expired = await get_expired_listings()
+    for listing in expired:
+        old_ids = json.loads(listing.get("channel_message_ids") or "[]")
+        await delete_from_channel(context, old_ids)
+        await delete_listing(listing["id"])
+    if expired:
+        logger.info(f"Очистка: {len(expired)} истёкших объявлений удалено")
+
+
 # ====== ЗАПУСК ======
 
 async def post_init(app: Application):
     await init_db()
-    logger.info("База данных инициализирована.")
+    # 09:00 UTC = 11:00 Amsterdam (летнее время)
+    app.job_queue.run_daily(daily_repost, time=dt_time(9, 0, 0))
+    # Очистка истёкших в 08:00 UTC
+    app.job_queue.run_daily(cleanup_expired, time=dt_time(8, 0, 0))
+    logger.info("База данных инициализирована. Фоновые задачи запущены.")
 
 
 def main():
@@ -689,9 +784,9 @@ def main():
             ASK_MILEAGE:      [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_price)],
             ASK_PRICE:        [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_fuel)],
             ASK_FUEL:         [CallbackQueryHandler(ask_transmission, pattern="^fuel_")],
-            ASK_TRANSMISSION: [CallbackQueryHandler(ask_color, pattern="^tr_")],
-            ASK_COLOR:        [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_city)],
-            ASK_CITY:         [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_description)],
+            ASK_TRANSMISSION: [CallbackQueryHandler(ask_city, pattern="^tr_")],
+            ASK_CITY:         [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_phone)],
+            ASK_PHONE:        [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_description)],
             ASK_DESCRIPTION:  [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_photos)],
             ASK_PHOTOS: [
                 MessageHandler(filters.PHOTO, collect_photo),
@@ -720,6 +815,7 @@ def main():
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("mylistings", my_listings))
+    app.add_handler(CommandHandler("welcome", post_welcome))
     app.add_handler(listing_conv)
     app.add_handler(search_conv)
     app.add_handler(CallbackQueryHandler(my_listings, pattern="^my_listings$"))

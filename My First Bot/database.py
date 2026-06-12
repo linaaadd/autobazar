@@ -14,6 +14,7 @@ async def init_db():
                 id                  INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id             INTEGER NOT NULL,
                 username            TEXT,
+                phone               TEXT,
                 status              TEXT    DEFAULT 'active',
                 created_at          TEXT,
                 expires_at          TEXT,
@@ -25,13 +26,17 @@ async def init_db():
                 currency            TEXT    DEFAULT 'EUR',
                 fuel                TEXT,
                 transmission        TEXT,
-                color               TEXT,
                 city                TEXT,
                 description         TEXT,
                 photo_ids           TEXT,
                 channel_message_ids TEXT
             )
         """)
+        # Migration: add phone column if table existed before
+        try:
+            await db.execute("ALTER TABLE listings ADD COLUMN phone TEXT")
+        except Exception:
+            pass
         await db.commit()
 
 
@@ -42,16 +47,17 @@ async def create_listing(data: dict) -> int:
         cursor = await db.execute(
             """
             INSERT INTO listings
-                (user_id, username, status, created_at, expires_at,
+                (user_id, username, phone, status, created_at, expires_at,
                  make, model, year, mileage, price, currency,
-                 fuel, transmission, color, city, description, photo_ids)
-            VALUES (?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 fuel, transmission, city, description, photo_ids)
+            VALUES (?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                data["user_id"], data.get("username"), now, expires,
+                data["user_id"], data.get("username"), data.get("phone", ""),
+                now, expires,
                 data["make"], data["model"], data["year"], data["mileage"],
                 data["price"], data.get("currency", "EUR"), data["fuel"],
-                data["transmission"], data["color"], data["city"],
+                data["transmission"], data["city"],
                 data["description"], json.dumps(data["photo_ids"]),
             ),
         )
@@ -102,6 +108,17 @@ async def delete_listing(listing_id: int):
             "UPDATE listings SET status = 'deleted' WHERE id = ?", (listing_id,)
         )
         await db.commit()
+
+
+async def get_expired_listings() -> list:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        now = datetime.now().isoformat()
+        cursor = await db.execute(
+            "SELECT * FROM listings WHERE status = 'active' AND expires_at < ?",
+            (now,),
+        )
+        return [dict(r) for r in await cursor.fetchall()]
 
 
 async def search_listings(make=None, model=None, price_max=None, city=None) -> list:
