@@ -221,6 +221,8 @@ def confirm_keyboard(ai_done: bool = False):
     rows = []
     if not ai_done:
         rows.append([InlineKeyboardButton("✨ Улучшить описание AI", callback_data="improve_ai")])
+    else:
+        rows.append([InlineKeyboardButton("↩️ Вернуть оригинал", callback_data="revert_ai")])
     rows.append([InlineKeyboardButton("✅ Опубликовать", callback_data="publish")])
     rows.append([InlineKeyboardButton("❌ Отмена", callback_data="cancel_listing")])
     return InlineKeyboardMarkup(rows)
@@ -599,6 +601,7 @@ async def improve_with_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text("⏳ Генерирую улучшенное описание через Claude AI...")
 
     d = context.user_data
+    d["original_description"] = d.get("description", "")
     try:
         client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
         response = await client.messages.create(
@@ -627,6 +630,18 @@ async def improve_with_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
         listing_preview(context.user_data, len(d["photos"]), ai_improved=True),
         parse_mode="HTML",
         reply_markup=confirm_keyboard(ai_done=True),
+    )
+    return CONFIRM
+
+
+async def revert_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    context.user_data["description"] = context.user_data.get("original_description", context.user_data["description"])
+    await query.edit_message_text(
+        listing_preview(context.user_data, len(context.user_data["photos"])),
+        parse_mode="HTML",
+        reply_markup=confirm_keyboard(ai_done=False),
     )
     return CONFIRM
 
@@ -1048,6 +1063,7 @@ def main():
             ],
             CONFIRM: [
                 CallbackQueryHandler(improve_with_ai, pattern="^improve_ai$"),
+                CallbackQueryHandler(revert_ai, pattern="^revert_ai$"),
                 CallbackQueryHandler(publish_listing, pattern="^publish$"),
                 CallbackQueryHandler(cancel_listing, pattern="^cancel_listing$"),
             ],
