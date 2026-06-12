@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import sys
 from datetime import datetime
 
 import anthropic
@@ -31,10 +32,16 @@ load_dotenv()
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
-CHANNEL_ID = os.getenv("CHANNEL_ID")  # например @autobazar_nl или -1001234567890
+CHANNEL_ID = os.getenv("CHANNEL_ID")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
+
+# Проверка обязательных переменных окружения
+_missing = [v for v in ("TELEGRAM_TOKEN", "ANTHROPIC_API_KEY", "CHANNEL_ID") if not os.getenv(v)]
+if _missing:
+    logger.critical(f"Отсутствуют переменные окружения: {', '.join(_missing)}")
+    sys.exit(1)
 
 # ====== СОСТОЯНИЯ ДИАЛОГА: подача объявления ======
 (
@@ -372,8 +379,8 @@ async def improve_with_ai(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     d = context.user_data
     try:
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-        response = client.messages.create(
+        client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
+        response = await client.messages.create(
             model="claude-haiku-4-5-20251001",
             max_tokens=400,
             messages=[{
