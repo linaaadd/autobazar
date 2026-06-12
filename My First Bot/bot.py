@@ -46,9 +46,9 @@ if _missing:
 # ====== СОСТОЯНИЯ ДИАЛОГА: подача объявления ======
 (
     ASK_MAKE, ASK_MODEL, ASK_YEAR, ASK_MILEAGE, ASK_PRICE,
-    ASK_FUEL, ASK_TRANSMISSION, ASK_CITY, ASK_PHONE,
+    ASK_FUEL, ASK_TRANSMISSION, ASK_ENGINE, ASK_CITY, ASK_PHONE,
     ASK_DESCRIPTION, ASK_PHOTOS, CONFIRM,
-) = range(12)
+) = range(13)
 
 # ====== СОСТОЯНИЯ ДИАЛОГА: поиск ======
 SEARCH_MAKE, SEARCH_MODEL, SEARCH_PRICE_MAX = range(20, 23)
@@ -102,6 +102,18 @@ def year_keyboard() -> InlineKeyboardMarkup:
 
 
 # === НОВОЕ: city_keyboard ===
+ENGINE_VOLUMES = ["1.0", "1.2", "1.4", "1.6", "1.8", "2.0", "2.5", "3.0", "3.5", "4.0"]
+
+
+def engine_keyboard() -> InlineKeyboardMarkup:
+    rows = []
+    for i in range(0, len(ENGINE_VOLUMES), 3):
+        chunk = ENGINE_VOLUMES[i:i + 3]
+        rows.append([InlineKeyboardButton(f"{v}L", callback_data=f"eng_{v}") for v in chunk])
+    rows.append([InlineKeyboardButton("✏️ Другой объём", callback_data="eng_other")])
+    return InlineKeyboardMarkup(rows)
+
+
 def city_keyboard() -> InlineKeyboardMarkup:
     rows = []
     for i in range(0, len(NL_CITIES), 2):
@@ -177,16 +189,15 @@ def _contact(listing: dict) -> str:
 
 
 def listing_caption(listing: dict) -> str:
-    expires = datetime.fromisoformat(listing["expires_at"]).strftime("%d.%m.%Y")
+    engine = f"  |  🔧 {listing['engine']}" if listing.get("engine") else ""
     return (
         f"🚗 <b>{listing['make']} {listing['model']} {listing['year']}</b>\n"
         f"💶 <b>{listing['price']:,} {listing['currency']}</b>\n\n"
         f"📍 {listing['city']}\n"
         f"🛣 {listing['mileage']:,} км\n"
-        f"⛽ {listing['fuel']}  |  ⚙️ {listing['transmission']}\n\n"
+        f"⛽ {listing['fuel']}  |  ⚙️ {listing['transmission']}{engine}\n\n"
         f"📝 {listing['description']}\n\n"
-        f"📞 Контакт: {_contact(listing)}\n"
-        f"📅 Активно до: {expires}"
+        f"📞 Контакт: {_contact(listing)}"
     )
 
 
@@ -199,7 +210,7 @@ def listing_preview(d: dict, photo_count: int, ai_improved: bool = False) -> str
         f"💶 {d['price']:,} EUR\n"
         f"📍 {d['city']}\n"
         f"🛣 {d['mileage']:,} км\n"
-        f"⛽ {d['fuel']}  |  ⚙️ {d['transmission']}\n"
+        f"⛽ {d['fuel']}  |  ⚙️ {d['transmission']}{f'  |  🔧 ' + d['engine'] if d.get('engine') else ''}\n"
         f"📸 Фото: {photo_count}\n\n"
         f"📞 Контакт: {contact}\n\n"
         f"📝 {d['description']}"
@@ -410,6 +421,48 @@ async def ask_transmission(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ASK_TRANSMISSION
 
 
+async def ask_engine(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    context.user_data["transmission"] = query.data.replace("tr_", "")
+    await query.edit_message_text(
+        f"✅ КПП: <b>{context.user_data['transmission']}</b>\n\n"
+        "Шаг 8 из 12 — Объём двигателя",
+        parse_mode="HTML",
+        reply_markup=engine_keyboard(),
+    )
+    return ASK_ENGINE
+
+
+async def got_engine_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    if query.data == "eng_other":
+        await query.message.reply_text("✏️ Введите объём (например: 1.8):")
+        return ASK_ENGINE
+    engine = query.data.replace("eng_", "") + "L"
+    context.user_data["engine"] = engine
+    await query.message.reply_text(
+        f"✅ Двигатель: <b>{engine}</b>\n\n"
+        "Шаг 9 из 12 — Город",
+        parse_mode="HTML",
+        reply_markup=city_keyboard(),
+    )
+    return ASK_CITY
+
+
+async def ask_engine_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text.strip()
+    context.user_data["engine"] = text
+    await update.message.reply_text(
+        f"✅ Двигатель: <b>{text}</b>\n\n"
+        "Шаг 9 из 12 — Город",
+        parse_mode="HTML",
+        reply_markup=city_keyboard(),
+    )
+    return ASK_CITY
+
+
 # === ИЗМЕНЕНО: ask_city ===
 async def ask_city(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -417,7 +470,7 @@ async def ask_city(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["transmission"] = query.data.replace("tr_", "")
     await query.edit_message_text(
         f"✅ КПП: <b>{context.user_data['transmission']}</b>\n\n"
-        "Шаг 8 из 10 — Город",
+        "Шаг 8 из 12 — Город",
         parse_mode="HTML",
         reply_markup=city_keyboard(),
     )
@@ -598,6 +651,7 @@ async def publish_listing(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "currency": d.get("currency", "EUR"),
         "fuel": d["fuel"],
         "transmission": d["transmission"],
+        "engine": d.get("engine", ""),
         "city": d["city"],
         "description": d["description"],
         "photo_ids": d["photos"],
@@ -977,7 +1031,11 @@ def main():
             ASK_MILEAGE:      [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_price)],
             ASK_PRICE:        [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_fuel)],
             ASK_FUEL:         [CallbackQueryHandler(ask_transmission, pattern="^fuel_")],
-            ASK_TRANSMISSION: [CallbackQueryHandler(ask_city, pattern="^tr_")],
+            ASK_TRANSMISSION: [CallbackQueryHandler(ask_engine, pattern="^tr_")],
+            ASK_ENGINE: [
+                CallbackQueryHandler(got_engine_button, pattern="^eng_"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, ask_engine_text),
+            ],
             ASK_CITY: [
                 CallbackQueryHandler(got_city_button, pattern="^city_"),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, ask_phone),

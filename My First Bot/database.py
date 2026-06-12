@@ -15,6 +15,7 @@ async def init_db():
                 user_id             INTEGER NOT NULL,
                 username            TEXT,
                 phone               TEXT,
+                engine              TEXT,
                 status              TEXT    DEFAULT 'active',
                 created_at          TEXT,
                 expires_at          TEXT,
@@ -33,10 +34,11 @@ async def init_db():
             )
         """)
         # Migration: add phone column if table existed before
-        try:
-            await db.execute("ALTER TABLE listings ADD COLUMN phone TEXT")
-        except Exception:
-            pass
+        for col in ("phone TEXT", "engine TEXT"):
+            try:
+                await db.execute(f"ALTER TABLE listings ADD COLUMN {col}")
+            except Exception:
+                pass
         await db.commit()
 
 
@@ -47,13 +49,14 @@ async def create_listing(data: dict) -> int:
         cursor = await db.execute(
             """
             INSERT INTO listings
-                (user_id, username, phone, status, created_at, expires_at,
+                (user_id, username, phone, engine, status, created_at, expires_at,
                  make, model, year, mileage, price, currency,
                  fuel, transmission, city, description, photo_ids)
-            VALUES (?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 data["user_id"], data.get("username"), data.get("phone", ""),
+                data.get("engine", ""),
                 now, expires,
                 data["make"], data["model"], data["year"], data["mileage"],
                 data["price"], data.get("currency", "EUR"), data["fuel"],
