@@ -951,6 +951,46 @@ async def search_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
+# ====== AI FALLBACK ======
+
+async def ai_fallback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_text = update.message.text.strip()
+    try:
+        client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
+        response = await client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=100,
+            messages=[{
+                "role": "user",
+                "content": (
+                    f"Пользователь Telegram-бота написал: «{user_text}»\n\n"
+                    "Определи намерение и ответь ТОЛЬКО одним словом из списка:\n"
+                    "MENU — хочет главное меню / отменить / вернуться назад\n"
+                    "LISTINGS — хочет свои объявления\n"
+                    "SEARCH — хочет поиск\n"
+                    "OTHER — другое (тогда добавь через пробел короткий ответ на русском, до 100 символов)"
+                ),
+            }],
+        )
+        result = response.content[0].text.strip()
+    except Exception:
+        result = "OTHER Не понял запрос. Используйте меню ниже."
+
+    if result.startswith("MENU"):
+        context.user_data.clear()
+        await update.message.reply_text("🏠 Главное меню:", reply_markup=main_menu_keyboard())
+    elif result.startswith("LISTINGS"):
+        await my_listings(update, context)
+    elif result.startswith("SEARCH"):
+        await update.message.reply_text(
+            "🔍 Поиск:",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔍 Начать поиск", callback_data="search")]]),
+        )
+    else:
+        reply_text = result.replace("OTHER", "").strip() or "Используйте меню ниже."
+        await update.message.reply_text(reply_text, reply_markup=main_menu_keyboard())
+
+
 # ====== АДМИНИСТРАТИВНЫЕ КОМАНДЫ ======
 
 async def post_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1102,6 +1142,7 @@ def main():
     app.add_handler(CallbackQueryHandler(delete_listing_ask, pattern=r"^del_\d+$"))
     app.add_handler(CallbackQueryHandler(delete_listing_confirm, pattern=r"^confirm_del_\d+$"))
     app.add_handler(CallbackQueryHandler(go_main_menu, pattern="^main_menu$"))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, ai_fallback))
 
     logger.info("✅ AutoBazar Bot запущен!")
     app.run_polling()
