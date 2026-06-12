@@ -1,5 +1,6 @@
 import json
 from datetime import datetime, timedelta
+from typing import Optional
 
 import aiosqlite
 
@@ -58,7 +59,7 @@ async def create_listing(data: dict) -> int:
         return cursor.lastrowid
 
 
-async def get_listing(listing_id: int) -> dict | None:
+async def get_listing(listing_id: int) -> Optional[dict]:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         cursor = await db.execute("SELECT * FROM listings WHERE id = ?", (listing_id,))
