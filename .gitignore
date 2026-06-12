@@ -1,3 +1,9 @@
-﻿.env
+.env
 venv/
 __pycache__/
+*.db
+*.pyc
+*.jpg
+autobazar_logo*.png
+car_base.jpg
+.claude/
