@@ -54,7 +54,7 @@ if _missing:
 # ====== СОСТОЯНИЯ ДИАЛОГА: поиск ======
 SEARCH_MAKE, SEARCH_MODEL, SEARCH_PRICE_MAX = range(20, 23)
 
-FUEL_TYPES = ["Бензин", "Дизель", "Гибрид", "Электро", "Газ/Бензин"]
+FUEL_TYPES = ["Бензин", "Дизель", "Электро", "Газ/Бензин"]
 TRANSMISSION_TYPES = ["Автомат", "Механика"]
 
 TURBO_LABELS = {
