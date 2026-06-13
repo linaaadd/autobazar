@@ -257,16 +257,32 @@ def listing_caption(listing: dict) -> str:
         engine_parts.append(listing["engine"])
     if listing.get("turbo") and listing["turbo"] != "Атмосферный":
         engine_parts.append(listing["turbo"])
-    engine = ("  |  🔧 " + " ".join(engine_parts)) if engine_parts else ""
-    return (
-        f"🚗 <b>{listing['make']} {listing['model']} {listing['year']}</b>\n"
-        f"💶 <b>{listing['price']:,} {listing['currency']}</b>\n\n"
-        f"📍 {listing['city']}\n"
-        f"🛣 {listing['mileage']:,} км\n"
-        f"⛽ {listing['fuel']}  |  ⚙️ {listing['transmission']}{engine}\n\n"
-        f"📝 {listing['description']}\n\n"
-        f"📞 Контакт: {_contact(listing)}"
-    )
+    engine_str = " ".join(engine_parts)
+
+    lines = [
+        f"🚘 <b>{listing['make']} {listing['model']} · {listing['year']} г.</b>",
+        "",
+        f"💶 <b>{listing['price']:,} €</b>",
+        "",
+        f"📍 {listing['city']}",
+        f"🛣 Пробег: {listing['mileage']:,} км",
+        f"⛽ Топливо: {listing['fuel']}",
+        f"⚙️ КПП: {listing['transmission']}",
+    ]
+    if engine_str:
+        lines.append(f"🔧 Двигатель: {engine_str}")
+
+    lines += [
+        "",
+        "▬▬▬▬▬▬▬▬▬▬▬▬▬▬",
+        "",
+        f"{listing['description']}",
+        "",
+        "▬▬▬▬▬▬▬▬▬▬▬▬▬▬",
+        "",
+        f"📲 Контакт: {_contact(listing)}",
+    ]
+    return "\n".join(lines)
 
 
 def listing_preview(d: dict, photo_count: int, ai_improved: bool = False) -> str:
