@@ -1041,10 +1041,10 @@ async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     try:
                         caption = listing_caption(listing)
                         if len(cached) == 1:
-                            msg = await context.bot.send_photo(chat_id=CHANNEL_ID, photo=cached[0], caption=caption)
+                            msg = await context.bot.send_photo(chat_id=CHANNEL_ID, photo=cached[0], caption=caption, parse_mode="HTML")
                             msg_ids = [msg.message_id]
                         else:
-                            media = [InputMediaPhoto(cached[0], caption=caption)] + [InputMediaPhoto(f) for f in cached[1:]]
+                            media = [InputMediaPhoto(cached[0], caption=caption, parse_mode="HTML")] + [InputMediaPhoto(f) for f in cached[1:]]
                             msgs = await context.bot.send_media_group(chat_id=CHANNEL_ID, media=media)
                             msg_ids = [m.message_id for m in msgs]
                         await update_listing_channel_msgs(listing_id, msg_ids)
