@@ -62,7 +62,7 @@ if _missing:
 SEARCH_MAKE, SEARCH_MODEL, SEARCH_PRICE_MAX = range(20, 23)
 
 # ====== СОСТОЯНИЯ ДИАЛОГА: редактирование ======
-EDIT_CHOOSE_FIELD, EDIT_PRICE, EDIT_DESCRIPTION, EDIT_AI_CONFIRM = range(30, 34)
+EDIT_CHOOSE_FIELD, EDIT_PRICE, EDIT_DESCRIPTION, EDIT_AI_CONFIRM, EDIT_DESC_CONFIRM = range(30, 35)
 
 FUEL_TYPES = ["Бензин", "Дизель", "Электро", "Газ/Бензин"]
 TRANSMISSION_TYPES = ["Автомат", "Механика"]
@@ -1350,7 +1350,26 @@ async def edit_description_handler(update: Update, context: ContextTypes.DEFAULT
     if len(text) < 20:
         await update.message.reply_text("⚠️ Описание слишком короткое (минимум 20 символов).")
         return EDIT_DESCRIPTION
+    context.user_data["edit_new_desc"] = text
+    await update.message.reply_text(
+        "📝 <b>Новое описание:</b>\n\n"
+        f"<i>{text}</i>\n\n"
+        "Опубликовать в канале?",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ Опубликовать", callback_data="edit_desc_confirm")],
+            [InlineKeyboardButton("✏️ Изменить заново", callback_data="edit_desc_retry")],
+            [InlineKeyboardButton("❌ Отмена", callback_data="edit_done")],
+        ]),
+    )
+    return EDIT_DESC_CONFIRM
+
+
+async def edit_desc_confirm_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
     listing_id = context.user_data.get("editing_listing_id")
+    text = context.user_data.get("edit_new_desc", "")
     context.user_data["edit_original_desc"] = text
     await update_listing_field(listing_id, "description", text)
     listing = await get_listing(listing_id)
@@ -1358,13 +1377,20 @@ async def edit_description_handler(update: Update, context: ContextTypes.DEFAULT
     await delete_from_channel(context, old_ids)
     msg_ids = await post_to_channel(context, listing)
     await update_listing_channel_msgs(listing_id, msg_ids)
-    await update.message.reply_text(
-        "✅ Описание сохранено и объявление переопубликовано.\n\n"
+    await query.edit_message_text(
+        "✅ Описание обновлено и объявление переопубликовано.\n\n"
         f"📝 <i>{text}</i>",
         parse_mode="HTML",
         reply_markup=_edit_ai_keyboard(ai_done=False),
     )
     return EDIT_AI_CONFIRM
+
+
+async def edit_desc_retry_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text("✏️ Введите новое описание:")
+    return EDIT_DESCRIPTION
 
 
 async def edit_ai_improve(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1620,6 +1646,11 @@ def main():
             EDIT_CHOOSE_FIELD: [CallbackQueryHandler(edit_choose_field, pattern="^editf_")],
             EDIT_PRICE:        [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_price_handler)],
             EDIT_DESCRIPTION:  [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_description_handler)],
+            EDIT_DESC_CONFIRM: [
+                CallbackQueryHandler(edit_desc_confirm_handler, pattern="^edit_desc_confirm$"),
+                CallbackQueryHandler(edit_desc_retry_handler, pattern="^edit_desc_retry$"),
+                CallbackQueryHandler(edit_ai_done, pattern="^edit_done$"),
+            ],
             EDIT_AI_CONFIRM: [
                 CallbackQueryHandler(edit_ai_improve, pattern="^edit_ai_improve$"),
                 CallbackQueryHandler(edit_ai_revert, pattern="^edit_ai_revert$"),
