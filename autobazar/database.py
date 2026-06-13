@@ -37,7 +37,7 @@ async def init_db():
                 warning_sent        INTEGER DEFAULT 0
             )
         """)
-        for col in ("phone TEXT", "engine TEXT", "turbo TEXT", "warning_sent INTEGER DEFAULT 0"):
+        for col in ("phone TEXT", "engine TEXT", "turbo TEXT", "warning_sent INTEGER DEFAULT 0", "watermarked_photo_ids TEXT"):
             try:
                 await db.execute(f"ALTER TABLE listings ADD COLUMN {col}")
             except Exception:
@@ -108,9 +108,21 @@ async def extend_listing(listing_id: int):
         await db.commit()
 
 
+async def update_listing_watermarked_photos(listing_id: int, file_ids: list):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE listings SET watermarked_photo_ids = ? WHERE id = ?",
+            (json.dumps(file_ids), listing_id),
+        )
+        await db.commit()
+
+
 async def delete_listing(listing_id: int):
     async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute("UPDATE listings SET status = 'deleted' WHERE id = ?", (listing_id,))
+        await db.execute(
+            "UPDATE listings SET status = 'deleted', watermarked_photo_ids = NULL WHERE id = ?",
+            (listing_id,),
+        )
         await db.commit()
 
 

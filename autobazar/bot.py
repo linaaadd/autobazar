@@ -39,6 +39,7 @@ from database import (
     unhide_listing,
     update_listing_channel_msgs,
     update_listing_field,
+    update_listing_watermarked_photos,
 )
 
 load_dotenv()
@@ -199,7 +200,8 @@ def listing_preview(d: dict, photo_count: int, ai_improved: bool = False) -> str
 
 # ====== ПУБЛИКАЦИЯ В КАНАЛ ======
 
-async def post_to_channel(context, listing: dict) -> list[int]:
+async def post_to_channel(context, listing: dict) -> tuple[list[int], list[str]]:
+    """Returns (message_ids, watermarked_file_ids)."""
     caption = listing_caption(listing)
     photos = json.loads(listing["photo_ids"])
     try:
@@ -211,7 +213,7 @@ async def post_to_channel(context, listing: dict) -> list[int]:
                 caption=caption,
                 parse_mode="HTML",
             )
-            return [msg.message_id]
+            return [msg.message_id], [msg.photo[-1].file_id]
         else:
             media = [
                 InputMediaPhoto(
@@ -222,10 +224,10 @@ async def post_to_channel(context, listing: dict) -> list[int]:
                 for i, wm in enumerate(watermarked)
             ]
             msgs = await context.bot.send_media_group(chat_id=CHANNEL_ID, media=media)
-            return [m.message_id for m in msgs]
+            return [m.message_id for m in msgs], [m.photo[-1].file_id for m in msgs]
     except Exception as e:
         logger.error(f"Ошибка публикации в канал: {e}")
-        return []
+        return [], []
 
 
 async def delete_from_channel(context, message_ids: list):
@@ -344,8 +346,10 @@ async def extend_listing_handler(update: Update, context: ContextTypes.DEFAULT_T
 
     old_ids = json.loads(listing.get("channel_message_ids") or "[]")
     await delete_from_channel(context, old_ids)
-    msg_ids = await post_to_channel(context, listing)
+    msg_ids, wm_ids = await post_to_channel(context, listing)
     await update_listing_channel_msgs(listing_id, msg_ids)
+    if wm_ids:
+        await update_listing_watermarked_photos(listing_id, wm_ids)
 
     expires = datetime.fromisoformat(listing["expires_at"]).strftime("%d.%m.%Y")
     await context.bot.send_message(
@@ -637,8 +641,10 @@ async def edit_desc_confirm_handler(update: Update, context: ContextTypes.DEFAUL
         listing = await get_listing(listing_id)
         old_ids = json.loads(listing.get("channel_message_ids") or "[]")
         await delete_from_channel(context, old_ids)
-        msg_ids = await post_to_channel(context, listing)
+        msg_ids, wm_ids = await post_to_channel(context, listing)
         await update_listing_channel_msgs(listing_id, msg_ids)
+        if wm_ids:
+            await update_listing_watermarked_photos(listing_id, wm_ids)
         result_text = "✅ Описание обновлено и объявление переопубликовано."
     except Exception as e:
         logger.error(f"edit_desc_confirm error: {e}")
@@ -700,8 +706,35 @@ async def unhide_listing_handler(update: Update, context: ContextTypes.DEFAULT_T
         return
     await unhide_listing(listing_id)
     listing = await get_listing(listing_id)
-    msg_ids = await post_to_channel(context, listing)
-    await update_listing_channel_msgs(listing_id, msg_ids)
+    cached = json.loads(listing.get("watermarked_photo_ids") or "[]")
+    caption = listing_caption(listing)
+    if cached:
+        try:
+            if len(cached) == 1:
+                msg = await context.bot.send_photo(
+                    chat_id=CHANNEL_ID, photo=cached[0],
+                    caption=caption, parse_mode="HTML",
+                )
+                msg_ids = [msg.message_id]
+            else:
+                media = [
+                    InputMediaPhoto(media=fid, caption=caption if i == 0 else None, parse_mode="HTML" if i == 0 else None)
+                    for i, fid in enumerate(cached)
+                ]
+                msgs = await context.bot.send_media_group(chat_id=CHANNEL_ID, media=media)
+                msg_ids = [m.message_id for m in msgs]
+            await update_listing_channel_msgs(listing_id, msg_ids)
+        except Exception as e:
+            logger.warning(f"Fast unhide failed, falling back: {e}")
+            msg_ids, wm_ids = await post_to_channel(context, listing)
+            await update_listing_channel_msgs(listing_id, msg_ids)
+            if wm_ids:
+                await update_listing_watermarked_photos(listing_id, wm_ids)
+    else:
+        msg_ids, wm_ids = await post_to_channel(context, listing)
+        await update_listing_channel_msgs(listing_id, msg_ids)
+        if wm_ids:
+            await update_listing_watermarked_photos(listing_id, wm_ids)
     await query.answer(f"👁 Объявление #{listing_id} снова опубликовано", show_alert=True)
     items = await get_user_listings(query.from_user.id)
     text, markup = _build_listings_view(items)
@@ -739,9 +772,11 @@ async def daily_repost(context: ContextTypes.DEFAULT_TYPE):
     for listing in listings:
         old_ids = json.loads(listing.get("channel_message_ids") or "[]")
         await delete_from_channel(context, old_ids)
-        msg_ids = await post_to_channel(context, listing)
+        msg_ids, wm_ids = await post_to_channel(context, listing)
         if msg_ids:
             await update_listing_channel_msgs(listing["id"], msg_ids)
+            if wm_ids:
+                await update_listing_watermarked_photos(listing["id"], wm_ids)
             count += 1
     logger.info(f"Ежедневный репост: {count} объявлений переопубликовано")
 
@@ -1107,8 +1142,10 @@ async def webapp_photos_done(update: Update, context: ContextTypes.DEFAULT_TYPE)
     try:
         listing_id = await create_listing(full_data)
         listing = await get_listing(listing_id)
-        msg_ids = await post_to_channel(context, listing)
+        msg_ids, wm_ids = await post_to_channel(context, listing)
         await update_listing_channel_msgs(listing_id, msg_ids)
+        if wm_ids:
+            await update_listing_watermarked_photos(listing_id, wm_ids)
         kb = webapp_keyboard(update.effective_user.id)
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
