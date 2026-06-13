@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import io
 import json
 import logging
@@ -263,10 +264,14 @@ async def go_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     context.user_data.clear()
+    try:
+        await query.delete_message()
+    except Exception:
+        pass
     kb = webapp_keyboard(query.from_user.id)
-    await query.edit_message_text(
-        "🏠 Главное меню",
-        parse_mode="HTML",
+    await context.bot.send_message(
+        chat_id=query.message.chat_id,
+        text="🏠 Главное меню",
         reply_markup=kb,
     )
 
@@ -544,8 +549,10 @@ async def edit_price_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     listing = await get_listing(listing_id)
     old_ids = json.loads(listing.get("channel_message_ids") or "[]")
     await delete_from_channel(context, old_ids)
-    msg_ids = await post_to_channel(context, listing)
+    msg_ids, wm_ids = await post_to_channel(context, listing)
     await update_listing_channel_msgs(listing_id, msg_ids)
+    if wm_ids:
+        await update_listing_watermarked_photos(listing_id, wm_ids)
     await update.message.reply_text(
         f"✅ Цена обновлена: <b>{new_price:,} EUR</b>. Объявление переопубликовано.",
         parse_mode="HTML",
@@ -1067,7 +1074,14 @@ async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
         elif action == "extend":
             await extend_listing(listing_id)
-            await update.message.reply_text("🔄 Объявление продлено на 30 дней.", reply_markup=kb)
+            listing = await get_listing(listing_id)
+            old_ids = json.loads(listing.get("channel_message_ids") or "[]")
+            await delete_from_channel(context, old_ids)
+            msg_ids, wm_ids = await post_to_channel(context, listing)
+            await update_listing_channel_msgs(listing_id, msg_ids)
+            if wm_ids:
+                await update_listing_watermarked_photos(listing_id, wm_ids)
+            await update.message.reply_text("🔄 Объявление продлено на 30 дней и переопубликовано.", reply_markup=kb)
 
         elif action == "delete":
             msg_ids = json.loads(listing.get("channel_message_ids") or "[]")
@@ -1122,7 +1136,6 @@ async def collect_webapp_photo(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text("⚠️ Максимум 10 фотографий. Нажмите «Фото готовы».")
         return
     file_id = update.message.photo[-1].file_id
-    import base64
     try:
         tg_file = await context.bot.get_file(file_id)
         img_bytes = bytes(await tg_file.download_as_bytearray())
