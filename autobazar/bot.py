@@ -167,17 +167,13 @@ def listing_caption(listing: dict) -> str:
     if engine_str:
         lines.append(f"🔧 Двигатель: {engine_str}")
 
-    lines += [
-        "",
-        "▬▬▬▬▬▬▬▬▬▬▬▬▬▬",
-        "",
-        f"{listing['description']}",
-        "",
-        "▬▬▬▬▬▬▬▬▬▬▬▬▬▬",
-        "",
-        f"📲 Контакт: {_contact(listing)}",
-    ]
-    return "\n".join(lines)
+    footer = f"\n▬▬▬▬▬▬▬▬▬▬▬▬▬▬\n\n📲 Контакт: {_contact(listing)}"
+    header = "\n".join(lines) + "\n\n▬▬▬▬▬▬▬▬▬▬▬▬▬▬\n\n"
+    max_desc = 1024 - len(header) - len(footer)
+    desc = listing['description']
+    if len(desc) > max_desc:
+        desc = desc[:max_desc - 1] + "…"
+    return header + desc + footer
 
 
 def listing_preview(d: dict, photo_count: int, ai_improved: bool = False) -> str:
