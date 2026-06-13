@@ -648,9 +648,11 @@ function renderListingCard(l){
 function renderMyListings(){
   var el=gi('my-list');
   el.innerHTML='<div style="text-align:center;padding:30px;color:var(--hint);">⏳ Загрузка…</div>';
-  var uid=(tg.initDataUnsafe&&tg.initDataUnsafe.user)?tg.initDataUnsafe.user.id:null;
+  var uid=(tg.initDataUnsafe&&tg.initDataUnsafe.user&&tg.initDataUnsafe.user.id)
+    ?tg.initDataUnsafe.user.id
+    :new URLSearchParams(location.search).get('user_id');
   if(!uid){
-    el.innerHTML='<div class="empty"><div class="empty-ico">👤</div><div class="empty-title">Откройте через бота</div><div class="empty-sub">Для просмотра объявлений откройте приложение через бота</div></div>';
+    el.innerHTML='<div class="empty"><div class="empty-ico">👤</div><div class="empty-title">Откройте через бота</div><div class="empty-sub">Нажмите кнопку «📋 Мои авто» в боте</div></div>';
     return;
   }
   fetch('/api/listings?user_id='+uid)

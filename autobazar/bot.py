@@ -200,15 +200,16 @@ def main_menu_keyboard():
     ])
 
 
-def webapp_keyboard():
+def webapp_keyboard(user_id=None):
     """ReplyKeyboard с WebApp-кнопками — sendData работает только отсюда."""
     if not WEBAPP_URL:
         return None
+    uid = f"&user_id={user_id}" if user_id else ""
     return ReplyKeyboardMarkup(
         [[
-            KeyboardButton("🚗 Подать объявление", web_app=WebAppInfo(url=f"{WEBAPP_URL}/webapp?tab=publish")),
-            KeyboardButton("🔍 Поиск авто",         web_app=WebAppInfo(url=f"{WEBAPP_URL}/webapp?tab=search")),
-            KeyboardButton("📋 Мои авто",            web_app=WebAppInfo(url=f"{WEBAPP_URL}/webapp?tab=my")),
+            KeyboardButton("🚗 Подать объявление", web_app=WebAppInfo(url=f"{WEBAPP_URL}/webapp?tab=publish{uid}")),
+            KeyboardButton("🔍 Поиск авто",         web_app=WebAppInfo(url=f"{WEBAPP_URL}/webapp?tab=search{uid}")),
+            KeyboardButton("📋 Мои авто",            web_app=WebAppInfo(url=f"{WEBAPP_URL}/webapp?tab=my{uid}")),
         ]],
         resize_keyboard=True,
         input_field_placeholder="Выберите действие",
@@ -449,7 +450,7 @@ async def delete_from_channel(context, message_ids: list):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     name = update.effective_user.first_name
-    kb = webapp_keyboard()
+    kb = webapp_keyboard(update.effective_user.id)
     await update.message.reply_text(
         f"👋 Привет, {name}!\n\n"
         "Добро пожаловать в <b>AutoBazar NL</b> — маркетплейс автомобилей.\n\n"
@@ -467,7 +468,7 @@ async def go_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     context.user_data.clear()
     name = query.from_user.first_name
-    kb = webapp_keyboard()
+    kb = webapp_keyboard(query.from_user.id)
     text = (
         f"👋 Привет, {name}!\n\n"
         "Добро пожаловать в <b>AutoBazar NL</b> — маркетплейс автомобилей.\n\n"
@@ -997,13 +998,28 @@ async def my_listings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.callback_query:
         await update.callback_query.answer()
         user_id = update.callback_query.from_user.id
-        reply = update.callback_query.edit_message_text
+        send = update.callback_query.message.reply_text
     else:
         user_id = update.effective_user.id
-        reply = update.message.reply_text
-    items = await get_user_listings(user_id)
-    text, markup = _build_listings_view(items)
-    await reply(text, parse_mode="HTML", reply_markup=markup)
+        send = update.message.reply_text
+
+    if WEBAPP_URL:
+        kb = ReplyKeyboardMarkup(
+            [[KeyboardButton(
+                "📋 Открыть Мои авто",
+                web_app=WebAppInfo(url=f"{WEBAPP_URL}/webapp?tab=my&user_id={user_id}"),
+            )]],
+            resize_keyboard=True,
+            one_time_keyboard=True,
+        )
+        await send("👆 Нажмите кнопку ниже, чтобы открыть ваши объявления:", reply_markup=kb)
+    else:
+        items = await get_user_listings(user_id)
+        text, markup = _build_listings_view(items)
+        if update.callback_query:
+            await update.callback_query.edit_message_text(text, parse_mode="HTML", reply_markup=markup)
+        else:
+            await send(text, parse_mode="HTML", reply_markup=markup)
 
 
 async def extend_listing_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1679,7 +1695,7 @@ async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
 
     action = data.get("action")
-    kb = webapp_keyboard()
+    kb = webapp_keyboard(update.effective_user.id)
 
     # ── ПОИСК ──
     if action == "search":
