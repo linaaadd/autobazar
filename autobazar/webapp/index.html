@@ -667,40 +667,34 @@ function renderMyListings(){
   fetch('/api/listings?user_id='+uid)
     .then(function(r){return r.json();})
     .then(function(data){
+      _myListingsCache=data;
       if(!data.length){el.innerHTML='<div class="empty"><div class="empty-ico">🚗</div><div class="empty-title">Нет объявлений</div><div class="empty-sub">Подайте первое объявление и оно появится здесь</div></div><button class="btn btn-primary" onclick="showTab(\'publish\')">📝 Подать объявление</button>';return;}
       el.innerHTML=data.map(renderListingCard).join('');
     })
     .catch(function(){el.innerHTML='<div class="empty"><div class="empty-ico">⚠️</div><div class="empty-title">Ошибка загрузки</div><div class="empty-sub">Попробуйте позже</div></div>';});
 }
 var _editListing=null;
+var _myListingsCache=[];
 function act(a,id){
-  if(a==='edit'){
-    var cards=document.querySelectorAll('.listing-card');
-    // find listing data from rendered card — re-fetch from cache
-    openEditPanel(id);return;
-  }
+  if(a==='edit'){openEditPanel(id);return;}
   tg.sendData(JSON.stringify({action:a,id:id}));
 }
 function openEditPanel(id){
-  fetch('/api/listings?user_id='+(tg.initDataUnsafe&&tg.initDataUnsafe.user?tg.initDataUnsafe.user.id:new URLSearchParams(location.search).get('user_id')))
-    .then(function(r){return r.json();})
-    .then(function(data){
-      var l=data.find(function(x){return x.id==id;});
-      if(!l){tg.showAlert('Не найдено');return;}
-      _editListing=l;
-      var p=gi('edit-panel');
-      p.innerHTML='<div class="panel-header"><button class="panel-close" onclick="closeEditPanel()">✕</button><div class="panel-title">✏️ '+l.make+' '+l.model+'</div></div>'
-        +'<div class="panel-body">'
-        +'<div class="filter-label">Цена (€)</div>'
-        +'<input class="inp" id="ep-price" type="number" value="'+l.price+'">'
-        +'<div class="filter-label" style="margin-top:14px;">Описание</div>'
-        +'<textarea class="inp" id="ep-desc" rows="7">'+((l.description||''))+'</textarea>'
-        +'<button class="btn btn-ai" style="margin-top:8px;" onclick="aiImproveEdit()">✨ Улучшить с ИИ</button>'
-        +'<button class="btn btn-primary" style="margin-top:10px;" onclick="saveEdit()">💾 Сохранить</button>'
-        +'</div>';
-      p.classList.add('open');
-      gi('overlay').classList.add('active');
-    });
+  var l=_myListingsCache.find(function(x){return x.id==id;});
+  if(!l){tg.showAlert('Не найдено');return;}
+  _editListing=l;
+  var p=gi('edit-panel');
+  p.innerHTML='<div class="panel-header"><div class="panel-title">✏️ '+l.make+' '+l.model+'</div><button class="panel-close" onclick="closeEditPanel()">✕</button></div>'
+    +'<div class="panel-body">'
+    +'<div class="filter-label">Цена (€)</div>'
+    +'<input class="inp" id="ep-price" type="number" value="'+l.price+'">'
+    +'<div class="filter-label" style="margin-top:14px;">Описание</div>'
+    +'<textarea class="inp" id="ep-desc" rows="7">'+((l.description||''))+'</textarea>'
+    +'<button class="btn btn-ai" style="margin-top:8px;" onclick="aiImproveEdit()">✨ Улучшить с ИИ</button>'
+    +'<button class="btn btn-primary" style="margin-top:10px;" onclick="saveEdit()">💾 Сохранить</button>'
+    +'</div>';
+  p.classList.add('open');
+  gi('overlay').classList.add('active');
 }
 function closeEditPanel(){gi('edit-panel').classList.remove('open');gi('overlay').classList.remove('active');}
 function aiImproveEdit(){

@@ -1639,8 +1639,9 @@ async def _api_listings(request: aio_web.Request) -> aio_web.Response:
             "price":     r.get("price", 0),
             "mileage":   r.get("mileage", 0),
             "city":      r.get("city", ""),
-            "status":    r.get("status", "active"),
-            "days_left": days_left,
+            "status":      r.get("status", "active"),
+            "days_left":   days_left,
+            "description": r.get("description", ""),
         })
     return _cors(aio_web.Response(
         content_type="application/json",
