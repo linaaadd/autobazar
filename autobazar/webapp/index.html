@@ -16,581 +16,647 @@
   --btn:var(--tg-theme-button-color,#185fa5);
   --btntext:var(--tg-theme-button-text-color,#fff);
   --sep:rgba(128,128,128,0.18);
-  --danger:#ff453a;
+  --green:#30d158;
+  --red:#ff453a;
+  --orange:#ff9f0a;
+  --purple:#bf5af2;
 }
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding-bottom:68px;overflow-x:hidden}
-
-/* TAB BAR */
 #tabbar{position:fixed;bottom:0;left:0;right:0;z-index:100;display:flex;background:var(--bg2);border-top:.5px solid var(--sep);padding-bottom:env(safe-area-inset-bottom)}
-.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 4px 11px;background:none;border:none;cursor:pointer;color:var(--hint);font-size:10px;transition:color .15s}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 4px 10px;background:none;border:none;cursor:pointer;color:var(--hint);font-size:10px;transition:color .15s}
 .tab.active{color:var(--link)}
-.tab-icon{font-size:22px}
-
-/* SCREENS */
+.tab svg{width:24px;height:24px;fill:currentColor}
 .screen{display:none}.screen.active{display:block}
-.screen-header{padding:16px 16px 10px;font-size:20px;font-weight:700;letter-spacing:-.3px}
-
-/* FILTER BUTTONS */
-.filter-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 12px 12px}
-.fbtn{background:var(--bg2);border:.5px solid var(--sep);border-radius:13px;padding:10px 12px;text-align:left;cursor:pointer;color:inherit;transition:border-color .15s}
+.screen-header{padding:18px 16px 6px;font-size:22px;font-weight:700;letter-spacing:-.4px}
+.screen-sub{padding:0 16px 12px;font-size:13px;color:var(--hint)}
+.filter-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 12px 10px}
+.fbtn{background:var(--bg2);border:.5px solid var(--sep);border-radius:13px;padding:11px 12px;text-align:left;cursor:pointer;color:inherit;transition:border-color .15s;width:100%}
 .fbtn.has-val{border-color:var(--link)}
+.fbtn.full{grid-column:1/-1}
 .fbtn-label{font-size:11px;color:var(--hint);display:block;margin-bottom:3px}
 .fbtn-val{font-size:13px;font-weight:500;display:flex;align-items:center;justify-content:space-between;gap:4px}
 .fbtn.has-val .fbtn-val{color:var(--link)}
-.fbtn-arrow{opacity:.5;font-size:15px}
-
-/* ACTIVE SUMMARY */
-.active-summary{margin:0 12px 10px;background:var(--bg2);border-radius:12px;padding:10px 13px;border-left:3px solid var(--link);font-size:13px}
-.active-summary-label{font-size:11px;font-weight:600;color:var(--link);text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px}
-.active-summary-val{color:var(--hint);font-style:italic}
-
-/* PRIMARY BUTTON */
-.primary-btn{display:block;width:calc(100% - 24px);margin:6px 12px;padding:14px;background:var(--btn);color:var(--btntext);border:none;border-radius:13px;font-size:15px;font-weight:600;cursor:pointer;transition:opacity .15s}
-.primary-btn:active{opacity:.8}
-.primary-btn.danger{background:var(--danger)}
-
-/* PANEL OVERLAY */
-#panel-overlay{position:fixed;inset:0;z-index:200;background:var(--bg);transform:translateX(100%);transition:transform .28s cubic-bezier(.4,0,.2,1);display:flex;flex-direction:column}
-#panel-overlay.open{transform:translateX(0)}
-.panel-nav{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:.5px solid var(--sep);flex-shrink:0}
-.back-btn{background:none;border:none;color:var(--link);font-size:15px;cursor:pointer;padding:6px 10px 6px 0;display:flex;align-items:center;gap:4px}
-.panel-nav-title{font-size:17px;font-weight:600}
+.fbtn-arrow{opacity:.4;font-size:16px;line-height:1;flex-shrink:0}
+.fbtn-val span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.summary{margin:0 12px 10px;background:var(--bg2);border-radius:12px;padding:10px 13px;border-left:3px solid var(--link)}
+.summary-label{font-size:11px;font-weight:600;color:var(--link);text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px}
+.summary-val{font-size:13px;color:var(--hint);font-style:italic}
+.btn{display:block;width:calc(100% - 24px);margin:6px 12px;padding:14px;border:none;border-radius:13px;font-size:15px;font-weight:600;cursor:pointer;transition:opacity .15s;font-family:inherit}
+.btn:active{opacity:.8}
+.btn-primary{background:var(--btn);color:var(--btntext)}
+.btn-ai{background:linear-gradient(135deg,rgba(191,90,242,.2),rgba(58,143,217,.2));border:.5px solid var(--purple);color:var(--purple)}
+.btn-secondary{background:var(--bg2);color:var(--link)}
+.btn:disabled{opacity:.4}
+.link-btn{font-size:13px;color:var(--link);background:none;border:none;cursor:pointer;padding:4px 12px 10px;display:block;font-family:inherit}
+#panel{position:fixed;inset:0;z-index:200;background:var(--bg);transform:translateX(100%);transition:transform .27s cubic-bezier(.4,0,.2,1);display:flex;flex-direction:column}
+#panel.open{transform:translateX(0)}
+.panel-nav{display:flex;align-items:center;padding:12px 16px;border-bottom:.5px solid var(--sep);flex-shrink:0;gap:8px}
+.panel-back{background:none;border:none;color:var(--link);font-size:15px;cursor:pointer;padding:4px 8px 4px 0;font-family:inherit}
+.panel-title{font-size:17px;font-weight:600;flex:1}
+.panel-reset{background:none;border:none;color:var(--red);font-size:13px;cursor:pointer;font-family:inherit}
 .panel-body{padding:16px;overflow-y:auto;flex:1}
-
-/* CHIPS */
+.panel-apply{flex-shrink:0;padding:8px 12px 12px}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
-.chip{border:.5px solid var(--sep);border-radius:20px;padding:7px 15px;font-size:14px;cursor:pointer;background:var(--bg2);color:var(--text);transition:all .15s}
+.chip{border:.5px solid var(--sep);border-radius:20px;padding:7px 16px;font-size:14px;cursor:pointer;background:var(--bg2);color:var(--text);transition:all .15s;font-family:inherit}
 .chip.sel{background:rgba(58,143,217,.15);border-color:var(--link);color:var(--link);font-weight:500}
 .chip.sel::before{content:"✓ "}
-
-/* INPUTS */
-.inp{width:100%;padding:11px 13px;background:var(--bg2);border:.5px solid var(--sep);border-radius:11px;font-size:14px;color:var(--text);outline:none;font-family:inherit}
+.chip.turbo-chip.sel{background:rgba(255,159,10,.15);border-color:var(--orange);color:var(--orange)}
+.chip.turbo-chip.sel::before{content:"⚡ "}
+.inp{width:100%;padding:12px 13px;background:var(--bg2);border:.5px solid var(--sep);border-radius:11px;font-size:14px;color:var(--text);outline:none;font-family:inherit}
 .inp:focus{border-color:var(--link)}
 .inp::placeholder{color:var(--hint)}
-.range-row{display:flex;gap:8px;margin-top:10px}
+textarea.inp{resize:none;line-height:1.5}
+.range-row{display:flex;gap:8px}
 .range-row .inp{flex:1}
-.search-inp-wrap{position:relative;margin-bottom:12px}
-.search-inp-wrap .inp{padding-left:36px}
-.search-ico{position:absolute;left:11px;top:50%;transform:translateY(-50%);font-size:16px;pointer-events:none}
-.section-label{font-size:12px;color:var(--hint);margin:14px 0 8px;font-weight:500}
-
-/* PUBLISH FORM */
-.form-sep{margin:8px 0 0;padding:10px 14px 4px;font-size:12px;font-weight:600;color:var(--hint);text-transform:uppercase;letter-spacing:.5px}
-.req::after{content:" *";color:#ff6b6b}
-.form-field{padding:0 12px 10px}
-.form-chips{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:8px}
-.form-chip{border:.5px solid var(--sep);border-radius:20px;padding:6px 13px;font-size:13px;cursor:pointer;background:var(--bg2);color:var(--text);transition:all .15s}
-.form-chip.sel{background:rgba(58,143,217,.15);border-color:var(--link);color:var(--link);font-weight:500}
-.form-inp{width:100%;padding:12px 13px;background:var(--bg2);border:.5px solid var(--sep);border-radius:11px;font-size:14px;color:var(--text);outline:none;font-family:inherit}
-.form-inp:focus{border-color:var(--link)}
-.form-inp::placeholder{color:var(--hint)}
-textarea.form-inp{resize:none;min-height:88px;line-height:1.45}
-.info-note{margin:0 12px 12px;background:var(--bg2);border-radius:11px;padding:10px 13px;font-size:12px;color:var(--hint);border-left:2px solid var(--link)}
-
-/* RESET FILTERS */
-.reset-link{font-size:13px;color:var(--link);background:none;border:none;cursor:pointer;padding:4px 12px 10px;display:block}
+.field-label{font-size:12px;color:var(--hint);margin:14px 0 6px;font-weight:500;text-transform:uppercase;letter-spacing:.3px}
+.search-box{position:relative;margin-bottom:12px}
+.search-box .inp{padding-left:36px}
+.search-box::before{content:"🔍";position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:14px;pointer-events:none}
+.ac-list{border:.5px solid var(--sep);border-radius:11px;overflow:hidden;margin-top:8px}
+.ac-list:empty{display:none}
+.ac-item{padding:12px 14px;background:var(--bg2);cursor:pointer;font-size:14px;border-bottom:.5px solid var(--sep)}
+.ac-item:last-child{border-bottom:none}
+.ac-item:active{background:var(--bg)}
+.ac-item b{color:var(--link)}
+.ac-sub{font-size:12px;color:var(--hint);margin-top:2px}
+.ac-hint{padding:10px 14px;font-size:13px;color:var(--hint);background:var(--bg2)}
+.listing-card{background:var(--bg2);border-radius:14px;margin:0 12px 10px;overflow:hidden}
+.listing-card-header{padding:13px 14px 8px}
+.listing-title{font-size:16px;font-weight:600}
+.listing-meta{font-size:13px;color:var(--hint);margin-top:3px}
+.listing-price{font-size:18px;font-weight:700;color:var(--link);margin-top:6px}
+.listing-status{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:500;padding:3px 9px;border-radius:20px;margin-top:6px}
+.status-active{background:rgba(48,209,88,.15);color:var(--green)}
+.status-hidden{background:rgba(255,159,10,.15);color:var(--orange)}
+.status-expired{background:rgba(255,69,58,.15);color:var(--red)}
+.listing-actions{display:grid;grid-template-columns:1fr 1fr;border-top:.5px solid var(--sep)}
+.la-btn{background:none;border:none;border-right:.5px solid var(--sep);padding:11px 6px;font-size:12px;font-weight:500;cursor:pointer;color:var(--link);font-family:inherit;transition:background .15s}
+.la-btn:last-child{border-right:none}
+.la-btn:active{background:var(--sep)}
+.la-btn.red{color:var(--red)}
+.empty{text-align:center;padding:60px 24px}
+.empty-ico{font-size:48px;margin-bottom:12px}
+.empty-title{font-size:17px;font-weight:600;margin-bottom:6px}
+.empty-sub{font-size:14px;color:var(--hint);line-height:1.4}
 </style>
 </head>
 <body>
-<div id="app">
 
-  <!-- SEARCH SCREEN -->
-  <div class="screen active" id="screen-search">
-    <div class="screen-header">🔍 Поиск авто</div>
-    <div class="active-summary">
-      <div class="active-summary-label">Фильтры</div>
-      <div class="active-summary-val" id="summary-text">ничего не выбрано</div>
-    </div>
-    <div class="filter-grid">
-      <button class="fbtn" id="fb-brand" onclick="openPanel('brand')">
-        <span class="fbtn-label">Марка</span>
-        <span class="fbtn-val"><span id="v-brand">Любая</span><span class="fbtn-arrow">›</span></span>
-      </button>
-      <button class="fbtn" id="fb-year" onclick="openPanel('year')">
-        <span class="fbtn-label">Год выпуска</span>
-        <span class="fbtn-val"><span id="v-year">Любой</span><span class="fbtn-arrow">›</span></span>
-      </button>
-      <button class="fbtn" id="fb-price" onclick="openPanel('price')">
-        <span class="fbtn-label">Цена (€)</span>
-        <span class="fbtn-val"><span id="v-price">Любая</span><span class="fbtn-arrow">›</span></span>
-      </button>
-      <button class="fbtn" id="fb-fuel" onclick="openPanel('fuel')">
-        <span class="fbtn-label">Топливо</span>
-        <span class="fbtn-val"><span id="v-fuel">Любое</span><span class="fbtn-arrow">›</span></span>
-      </button>
-      <button class="fbtn" id="fb-trans" onclick="openPanel('trans')">
-        <span class="fbtn-label">Коробка</span>
-        <span class="fbtn-val"><span id="v-trans">Любая</span><span class="fbtn-arrow">›</span></span>
-      </button>
-      <button class="fbtn" id="fb-city" onclick="openPanel('city')">
-        <span class="fbtn-label">Город</span>
-        <span class="fbtn-val"><span id="v-city">Любой</span><span class="fbtn-arrow">›</span></span>
-      </button>
-    </div>
-    <button class="reset-link" onclick="resetFilters()">✕ Сбросить фильтры</button>
-    <button class="primary-btn" onclick="doSearch()">🔍 Найти автомобили</button>
+<div class="screen active" id="screen-search">
+  <div class="screen-header">🔍 Поиск авто</div>
+  <div class="summary"><div class="summary-label">Фильтры</div><div class="summary-val" id="s-summary">ничего не выбрано</div></div>
+  <div class="filter-grid">
+    <button class="fbtn" id="sfb-brand" onclick="openPanel('s','brand')"><span class="fbtn-label">Марка</span><span class="fbtn-val"><span id="sv-brand">Любая</span><span class="fbtn-arrow">›</span></span></button>
+    <button class="fbtn" id="sfb-model" onclick="openPanel('s','model')"><span class="fbtn-label">Модель</span><span class="fbtn-val"><span id="sv-model">Любая</span><span class="fbtn-arrow">›</span></span></button>
+    <button class="fbtn" id="sfb-year" onclick="openPanel('s','year')"><span class="fbtn-label">Год</span><span class="fbtn-val"><span id="sv-year">Любой</span><span class="fbtn-arrow">›</span></span></button>
+    <button class="fbtn" id="sfb-price" onclick="openPanel('s','price')"><span class="fbtn-label">Цена (€)</span><span class="fbtn-val"><span id="sv-price">Любая</span><span class="fbtn-arrow">›</span></span></button>
+    <button class="fbtn" id="sfb-fuel" onclick="openPanel('s','fuel')"><span class="fbtn-label">Топливо</span><span class="fbtn-val"><span id="sv-fuel">Любое</span><span class="fbtn-arrow">›</span></span></button>
+    <button class="fbtn" id="sfb-trans" onclick="openPanel('s','trans')"><span class="fbtn-label">Коробка</span><span class="fbtn-val"><span id="sv-trans">Любая</span><span class="fbtn-arrow">›</span></span></button>
+    <button class="fbtn full" id="sfb-city" onclick="openPanel('s','city')"><span class="fbtn-label">Город</span><span class="fbtn-val"><span id="sv-city">Любой</span><span class="fbtn-arrow">›</span></span></button>
   </div>
-
-  <!-- PUBLISH SCREEN -->
-  <div class="screen" id="screen-publish">
-    <div class="screen-header">📝 Подать объявление</div>
-    <div class="info-note">💡 После заполнения формы бот попросит загрузить фотографии</div>
-
-    <div class="form-sep req">Марка</div>
-    <div class="form-field">
-      <div class="form-chips" id="chips-make">
-        <button class="form-chip" onclick="pickChip('make',this,'Toyota')">Toyota</button>
-        <button class="form-chip" onclick="pickChip('make',this,'BMW')">BMW</button>
-        <button class="form-chip" onclick="pickChip('make',this,'Mercedes')">Mercedes</button>
-        <button class="form-chip" onclick="pickChip('make',this,'Volkswagen')">Volkswagen</button>
-        <button class="form-chip" onclick="pickChip('make',this,'Audi')">Audi</button>
-        <button class="form-chip" onclick="pickChip('make',this,'Škoda')">Škoda</button>
-        <button class="form-chip" onclick="pickChip('make',this,'Ford')">Ford</button>
-        <button class="form-chip" onclick="pickChip('make',this,'Hyundai')">Hyundai</button>
-        <button class="form-chip" onclick="pickChip('make',this,'Kia')">Kia</button>
-        <button class="form-chip" onclick="pickChip('make',this,'Opel')">Opel</button>
-        <button class="form-chip" onclick="pickChip('make',this,'Renault')">Renault</button>
-        <button class="form-chip" onclick="pickChip('make',this,'Volvo')">Volvo</button>
-        <button class="form-chip" onclick="pickChip('make',this,'Peugeot')">Peugeot</button>
-        <button class="form-chip" onclick="pickChip('make',this,'Mazda')">Mazda</button>
-        <button class="form-chip" onclick="pickChip('make',this,'Honda')">Honda</button>
-        <button class="form-chip" onclick="pickChip('make',this,'Nissan')">Nissan</button>
-      </div>
-      <input class="form-inp" id="f-make-custom" placeholder="Другая марка…" oninput="if(this.value.trim()){clearGroupChips('chips-make');pub.make=''}" style="margin-top:6px">
-    </div>
-
-    <div class="form-sep req">Модель</div>
-    <div class="form-field">
-      <input class="form-inp" id="f-model" placeholder="Например: Camry, X5, Golf…">
-    </div>
-
-    <div class="form-sep req">Год выпуска</div>
-    <div class="form-field">
-      <div class="form-chips" id="chips-year-pub"></div>
-      <input class="form-inp" id="f-year-custom" type="number" placeholder="Другой год…" min="1990" max="2026" style="margin-top:6px">
-    </div>
-
-    <div class="form-sep req">Пробег (км)</div>
-    <div class="form-field">
-      <input class="form-inp" id="f-mileage" type="number" placeholder="Например: 75 000">
-    </div>
-
-    <div class="form-sep req">Цена (€)</div>
-    <div class="form-field">
-      <input class="form-inp" id="f-price" type="number" placeholder="Например: 14 500">
-    </div>
-
-    <div class="form-sep req">Топливо</div>
-    <div class="form-field">
-      <div class="form-chips">
-        <button class="form-chip" onclick="pickChip('fuel',this,'Бензин')">Бензин</button>
-        <button class="form-chip" onclick="pickChip('fuel',this,'Дизель')">Дизель</button>
-        <button class="form-chip" onclick="pickChip('fuel',this,'Газ/Бензин')">Газ/Бензин</button>
-        <button class="form-chip" onclick="pickChip('fuel',this,'Электро')">Электро</button>
-        <button class="form-chip" onclick="pickChip('fuel',this,'Гибрид')">Гибрид</button>
-      </div>
-    </div>
-
-    <div class="form-sep req">Коробка передач</div>
-    <div class="form-field">
-      <div class="form-chips" id="chips-trans-pub">
-        <button class="form-chip" onclick="pickChip('transmission',this,'Автомат')">Автомат</button>
-        <button class="form-chip" onclick="pickChip('transmission',this,'Механика')">Механика</button>
-      </div>
-      <input class="form-inp" id="f-trans-custom" placeholder="Другая коробка…" oninput="if(this.value.trim()){clearGroupChips('chips-trans-pub');pub.transmission=''}" style="margin-top:6px">
-    </div>
-
-    <div class="form-sep">Объём двигателя (л)</div>
-    <div class="form-field">
-      <div class="form-chips" id="chips-engine-pub">
-        <button class="form-chip" onclick="pickChip('engine',this,'1.0')">1.0</button>
-        <button class="form-chip" onclick="pickChip('engine',this,'1.2')">1.2</button>
-        <button class="form-chip" onclick="pickChip('engine',this,'1.4')">1.4</button>
-        <button class="form-chip" onclick="pickChip('engine',this,'1.6')">1.6</button>
-        <button class="form-chip" onclick="pickChip('engine',this,'1.8')">1.8</button>
-        <button class="form-chip" onclick="pickChip('engine',this,'2.0')">2.0</button>
-        <button class="form-chip" onclick="pickChip('engine',this,'2.5')">2.5</button>
-        <button class="form-chip" onclick="pickChip('engine',this,'3.0')">3.0</button>
-        <button class="form-chip" onclick="pickChip('engine',this,'3.5')">3.5</button>
-        <button class="form-chip" onclick="pickChip('engine',this,'4.0')">4.0</button>
-      </div>
-      <input class="form-inp" id="f-engine-custom" placeholder="Другой объём (напр. 2.2)…" oninput="if(this.value.trim()){clearGroupChips('chips-engine-pub');pub.engine=''}" style="margin-top:6px">
-    </div>
-
-    <div class="form-sep req">Город</div>
-    <div class="form-field">
-      <div class="form-chips" id="chips-city-pub">
-        <button class="form-chip" onclick="pickChip('city',this,'Amsterdam')">Amsterdam</button>
-        <button class="form-chip" onclick="pickChip('city',this,'Rotterdam')">Rotterdam</button>
-        <button class="form-chip" onclick="pickChip('city',this,'Utrecht')">Utrecht</button>
-        <button class="form-chip" onclick="pickChip('city',this,'Den Haag')">Den Haag</button>
-        <button class="form-chip" onclick="pickChip('city',this,'Eindhoven')">Eindhoven</button>
-        <button class="form-chip" onclick="pickChip('city',this,'Tilburg')">Tilburg</button>
-        <button class="form-chip" onclick="pickChip('city',this,'Groningen')">Groningen</button>
-        <button class="form-chip" onclick="pickChip('city',this,'Almere')">Almere</button>
-        <button class="form-chip" onclick="pickChip('city',this,'Breda')">Breda</button>
-        <button class="form-chip" onclick="pickChip('city',this,'Nijmegen')">Nijmegen</button>
-        <button class="form-chip" onclick="pickChip('city',this,'Arnhem')">Arnhem</button>
-        <button class="form-chip" onclick="pickChip('city',this,'Haarlem')">Haarlem</button>
-      </div>
-      <input class="form-inp" id="f-city-custom" placeholder="Другой город…" oninput="if(this.value.trim()){clearGroupChips('chips-city-pub');pub.city=''}" style="margin-top:6px">
-    </div>
-
-    <div class="form-sep">Телефон</div>
-    <div class="form-field">
-      <input class="form-inp" id="f-phone" type="tel" placeholder="+31 6 12345678">
-    </div>
-
-    <div class="form-sep req">Описание</div>
-    <div class="form-field">
-      <textarea class="form-inp" id="f-description" rows="5"
-        placeholder="Расскажите о состоянии, комплектации, истории обслуживания…"></textarea>
-    </div>
-
-    <button class="primary-btn" onclick="doPublish()" style="margin-top:4px;margin-bottom:4px">📤 Отправить данные боту</button>
-    <div style="height:4px"></div>
-  </div>
-
+  <button class="link-btn" onclick="resetSearch()">✕ Сбросить фильтры</button>
+  <button class="btn btn-primary" onclick="doSearch()">🔍 Найти автомобили</button>
 </div>
 
-<!-- FILTER PANEL -->
-<div id="panel-overlay">
+<div class="screen" id="screen-publish">
+  <div class="screen-header">📝 Подать объявление</div>
+  <div class="screen-sub">Заполните данные — бот попросит фото</div>
+  <div class="filter-grid">
+    <button class="fbtn" id="pfb-make" onclick="openPanel('p','make')"><span class="fbtn-label">Марка *</span><span class="fbtn-val"><span id="pv-make">Выбрать</span><span class="fbtn-arrow">›</span></span></button>
+    <button class="fbtn" id="pfb-pmodel" onclick="openPanel('p','pmodel')"><span class="fbtn-label">Модель *</span><span class="fbtn-val"><span id="pv-pmodel">Ввести</span><span class="fbtn-arrow">›</span></span></button>
+    <button class="fbtn" id="pfb-pyear" onclick="openPanel('p','pyear')"><span class="fbtn-label">Год *</span><span class="fbtn-val"><span id="pv-pyear">Выбрать</span><span class="fbtn-arrow">›</span></span></button>
+    <button class="fbtn" id="pfb-mileage" onclick="openPanel('p','mileage')"><span class="fbtn-label">Пробег (км) *</span><span class="fbtn-val"><span id="pv-mileage">Ввести</span><span class="fbtn-arrow">›</span></span></button>
+    <button class="fbtn" id="pfb-pprice" onclick="openPanel('p','pprice')"><span class="fbtn-label">Цена (€) *</span><span class="fbtn-val"><span id="pv-pprice">Ввести</span><span class="fbtn-arrow">›</span></span></button>
+    <button class="fbtn" id="pfb-pfuel" onclick="openPanel('p','pfuel')"><span class="fbtn-label">Топливо *</span><span class="fbtn-val"><span id="pv-pfuel">Выбрать</span><span class="fbtn-arrow">›</span></span></button>
+    <button class="fbtn" id="pfb-ptrans" onclick="openPanel('p','ptrans')"><span class="fbtn-label">Коробка *</span><span class="fbtn-val"><span id="pv-ptrans">Выбрать</span><span class="fbtn-arrow">›</span></span></button>
+    <button class="fbtn" id="pfb-engine" onclick="openPanel('p','engine')"><span class="fbtn-label">Двигатель</span><span class="fbtn-val"><span id="pv-engine">Не указан</span><span class="fbtn-arrow">›</span></span></button>
+    <button class="fbtn full" id="pfb-pcity" onclick="openPanel('p','pcity')"><span class="fbtn-label">Город *</span><span class="fbtn-val"><span id="pv-pcity">Выбрать</span><span class="fbtn-arrow">›</span></span></button>
+    <button class="fbtn full" id="pfb-desc" onclick="openPanel('p','desc')"><span class="fbtn-label">Описание *</span><span class="fbtn-val"><span id="pv-desc">Написать</span><span class="fbtn-arrow">›</span></span></button>
+    <button class="fbtn full" id="pfb-phone" onclick="openPanel('p','phone')"><span class="fbtn-label">Телефон</span><span class="fbtn-val"><span id="pv-phone">Не указан</span><span class="fbtn-arrow">›</span></span></button>
+  </div>
+  <button class="btn btn-primary" onclick="doPublish()">📤 Отправить боту</button>
+</div>
+
+<div class="screen" id="screen-my">
+  <div class="screen-header">📋 Мои объявления</div>
+  <div id="my-list"></div>
+</div>
+
+<div id="panel">
   <div class="panel-nav">
-    <button class="back-btn" onclick="closePanel()">‹ Назад</button>
-    <span class="panel-nav-title" id="panel-title">Фильтр</span>
-    <button class="back-btn" style="margin-left:auto;color:var(--danger)" onclick="clearCurFilter()">Сбросить</button>
+    <button class="panel-back" onclick="closePanel()">‹ Назад</button>
+    <span class="panel-title" id="panel-title"></span>
+    <button class="panel-reset" onclick="resetPanel()">Сбросить</button>
   </div>
   <div class="panel-body" id="panel-body"></div>
+  <div class="panel-apply" id="panel-apply"></div>
 </div>
 
-<!-- TAB BAR -->
 <div id="tabbar">
   <button class="tab active" id="tab-search" onclick="showTab('search')">
-    <span class="tab-icon">🔍</span><span>Поиск</span>
+    <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+    Поиск
   </button>
   <button class="tab" id="tab-publish" onclick="showTab('publish')">
-    <span class="tab-icon">📝</span><span>Подать</span>
+    <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/></svg>
+    Подать
+  </button>
+  <button class="tab" id="tab-my" onclick="showTab('my')">
+    <svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>
+    Мои авто
   </button>
 </div>
 
 <script>
-const tg = window.Telegram?.WebApp ?? {
-  ready(){}, expand(){}, sendData(d){alert('→ Bot data:\n'+d)},
-  showAlert(m,cb){alert(m);cb&&cb()}, close(){}
+var tg=(window.Telegram&&window.Telegram.WebApp)?window.Telegram.WebApp:{
+  ready:function(){},expand:function(){},
+  sendData:function(d){alert(JSON.stringify(JSON.parse(d),null,2));},
+  showAlert:function(m,cb){alert(m);if(cb)cb();},close:function(){}
 };
-tg.ready(); tg.expand();
+tg.ready();tg.expand();
 
-// ── SEARCH STATE ──
-const sv = { brands:[], year_from:'', year_to:'', price_from:'', price_to:'', fuel:'', transmission:'', city:'' };
+var CUR_YEAR=new Date().getFullYear();
 
-const BRANDS = ['Toyota','BMW','Mercedes','Volkswagen','Audi','Škoda','Ford',
-  'Hyundai','Kia','Opel','Renault','Volvo','Peugeot','Mazda','Honda','Nissan'];
-const NL_CITIES = ['Amsterdam','Rotterdam','Utrecht','Den Haag','Eindhoven','Tilburg',
-  'Groningen','Almere','Breda','Nijmegen','Arnhem','Haarlem','Zaandam','Amersfoort','Apeldoorn','Hoofddorp'];
+// ── CAR DATABASE ──
+// Popular brands shown immediately; full search via NHTSA API
+var BRANDS_POPULAR=[
+  'Audi','BMW','Chevrolet','Chrysler','Citroen','Cupra','Dacia','Dodge','DS','Ferrari',
+  'Fiat','Ford','Honda','Hyundai','Infiniti','Jaguar','Jeep','Kia','Lamborghini',
+  'Land Rover','Lexus','Maserati','Mazda','Mercedes-Benz','MG','Mini','Mitsubishi',
+  'Nissan','Opel','Peugeot','Porsche','Renault','Rolls-Royce','Seat','Skoda','Smart',
+  'Subaru','Suzuki','Tesla','Toyota','Volkswagen','Volvo','BYD','NIO','Lynk & Co',
+  'Alfa Romeo','Aston Martin','Bentley','Bugatti','Cadillac','Genesis','GMC',
+  'Great Wall','Haval','Honda','Isuzu','Lada','Lancia','Lincoln','Lotus','McLaren',
+  'Mclaren','Polestar','RAM','Saab','SEAT','SsangYong','Trabant','Triumph'
+];
 
-let curPanel = '';
+var modelsCache={};
 
-const PANELS = {
-  brand: {
-    title: 'Марка (можно несколько)',
-    build() {
-      const chips = BRANDS.map(b => {
-        const sel = sv.brands.includes(b);
-        return `<button class="chip${sel?' sel':''}" onclick="toggleBrand('${b}',this)">${b}</button>`;
-      }).join('');
-      return `
-        <div class="chips" id="brand-chips">${chips}</div>
-        <div class="section-label">Или введите вручную:</div>
-        <input class="inp" id="brand-other" placeholder="Другая марка…">
-        <button class="primary-btn" style="margin-top:14px" onclick="applyBrand()">Применить</button>`;
-    }
-  },
-  year: {
-    title: 'Год выпуска',
-    build() {
-      return `
-        <div class="section-label">Диапазон лет:</div>
-        <div class="range-row">
-          <input class="inp" id="y-from" type="number" placeholder="От" min="1990" max="2026" value="${sv.year_from}">
-          <input class="inp" id="y-to"   type="number" placeholder="До" min="1990" max="2026" value="${sv.year_to}">
-        </div>
-        <button class="primary-btn" style="margin-top:14px" onclick="applyYear()">Применить</button>`;
-    }
-  },
-  price: {
-    title: 'Цена (€)',
-    build() {
-      const presets = [[5000,'5 000'],[10000,'10 000'],[15000,'15 000'],[20000,'20 000'],[30000,'30 000'],[50000,'50 000']];
-      const maxChips = presets.map(([v,l]) =>
-        `<button class="chip${sv.price_to==v?' sel':''}" onclick="setPresetMax(${v},this)">до €${l}</button>`
-      ).join('');
-      return `
-        <div class="section-label">Диапазон цены:</div>
-        <div class="range-row">
-          <input class="inp" id="p-from" type="number" placeholder="От €" value="${sv.price_from}" oninput="clearMaxChips()">
-          <input class="inp" id="p-to"   type="number" placeholder="До €" value="${sv.price_to}"   oninput="clearMaxChips()">
-        </div>
-        <div class="section-label">Быстрый выбор максимума:</div>
-        <div class="chips" id="price-chips">${maxChips}</div>
-        <button class="primary-btn" style="margin-top:14px" onclick="applyPrice()">Применить</button>`;
-    }
-  },
-  fuel: {
-    title: 'Топливо',
-    build() {
-      return `<div class="chips">${['Бензин','Дизель','Газ/Бензин','Электро','Гибрид'].map(f =>
-        `<button class="chip${sv.fuel===f?' sel':''}" onclick="pickS('fuel',this,'${f}');closePanel()">${f}</button>`
-      ).join('')}</div>`;
-    }
-  },
-  trans: {
-    title: 'Коробка передач',
-    build() {
-      return `<div class="chips">${['Автомат','Механика'].map(t =>
-        `<button class="chip${sv.transmission===t?' sel':''}" onclick="pickS('transmission',this,'${t}');closePanel()">${t}</button>`
-      ).join('')}
-      </div>
-      <div class="section-label">Или введите вручную:</div>
-      <input class="inp" id="trans-other" placeholder="Другая коробка…" value="${!['Автомат','Механика',''].includes(sv.transmission)?sv.transmission:''}">
-      <button class="primary-btn" style="margin-top:14px" onclick="applyTrans()">Применить</button>`;
-    }
-  },
-  city: {
-    title: 'Город',
-    build() {
-      const chips = NL_CITIES.map(c =>
-        `<button class="chip${sv.city===c?' sel':''}" data-city="${c}" onclick="pickCity('${c}',this)">${c}</button>`
-      ).join('');
-      return `
-        <div class="search-inp-wrap">
-          <span class="search-ico">🔍</span>
-          <input class="inp" id="city-search" placeholder="Поиск города…" oninput="filterCities(this.value)">
-        </div>
-        <div class="chips" id="city-chips">${chips}</div>
-        <div class="section-label">Или введите вручную:</div>
-        <input class="inp" id="city-other" placeholder="Другой город…" value="${!NL_CITIES.includes(sv.city)?sv.city:''}">
-        <button class="primary-btn" style="margin-top:14px" onclick="applyCity()">Применить</button>`;
-    }
+function fetchModels(make,cb){
+  if(modelsCache[make]){cb(modelsCache[make]);return;}
+  var url='https://vpic.nhtsa.dot.gov/api/vehicles/getmodelsformake/'+encodeURIComponent(make)+'?format=json';
+  fetch(url)
+    .then(function(r){return r.json();})
+    .then(function(d){
+      var models=(d.Results||[]).map(function(x){return x.Model_Name;}).sort();
+      modelsCache[make]=models;
+      cb(models);
+    })
+    .catch(function(){cb([]);});
+}
+
+var BRANDS=BRANDS_POPULAR;
+var MODELS={};
+
+var FUELS=['Бензин','Дизель','Газ/Бензин','Электро','Гибрид'];
+var TRANS=['Автомат','Механика'];
+var ENGINES=['1.0','1.2','1.4','1.6','1.8','2.0','2.5','3.0','3.5','4.0'];
+var POP_CITIES=['Amsterdam','Rotterdam','Utrecht','Den Haag','Eindhoven','Tilburg','Groningen','Almere'];
+
+var sv={brands:[],model:'',year_from:'',year_to:'',price_from:'',price_to:'',fuel:'',transmission:'',city:''};
+var pv={make:'',model:'',year:'',mileage:'',price:'',fuel:'',transmission:'',engine:'',turbo:false,city:'',description:'',phone:''};
+var panelCtx='',panelKey='';
+
+function gi(id){return document.getElementById(id);}
+
+// ── BRAND SEARCH ──
+function buildBrandSearch(curSel,multiSelect){
+  var html='<div class="search-box"><input class="inp" id="brand-q" placeholder="Поиск среди всех марок…" autocomplete="off" oninput="filterBrands(this.value)"></div>'
+    +'<div class="ac-list" id="brand-ac"></div>'
+    +'<div class="field-label">Популярные марки:</div>'
+    +'<div class="chips" id="brand-chips">';
+  for(var i=0;i<BRANDS_POPULAR.length;i++){
+    var b=BRANDS_POPULAR[i];
+    var sel=multiSelect?(curSel.indexOf(b)>=0):(curSel===b);
+    html+='<button class="chip'+(sel?' sel':'')+'" data-v="'+b+'" onclick="selectBrand(\''+b+'\')">'+b+'</button>';
   }
-};
-
-function openPanel(id) {
-  curPanel = id;
-  const p = PANELS[id];
-  document.getElementById('panel-title').textContent = p.title;
-  document.getElementById('panel-body').innerHTML = p.build();
-  document.getElementById('panel-overlay').classList.add('open');
-}
-function closePanel() {
-  document.getElementById('panel-overlay').classList.remove('open');
-  updateSummary();
-}
-function clearCurFilter() {
-  if (curPanel === 'brand')  { sv.brands = []; updateFbtn('brand','v-brand','Любая'); }
-  if (curPanel === 'year')   { sv.year_from=''; sv.year_to=''; updateFbtn('year','v-year','Любой'); }
-  if (curPanel === 'price')  { sv.price_from=''; sv.price_to=''; updateFbtn('price','v-price','Любая'); }
-  if (curPanel === 'fuel')   { sv.fuel=''; updateFbtn('fuel','v-fuel','Любое'); }
-  if (curPanel === 'trans')  { sv.transmission=''; updateFbtn('trans','v-trans','Любая'); }
-  if (curPanel === 'city')   { sv.city=''; updateFbtn('city','v-city','Любой'); }
-  closePanel();
+  html+='</div>';
+  return html;
 }
 
-// Brand multi-toggle
-function toggleBrand(b, el) {
-  const idx = sv.brands.indexOf(b);
-  if (idx >= 0) { sv.brands.splice(idx,1); el.classList.remove('sel'); }
-  else { sv.brands.push(b); el.classList.add('sel'); }
+var brandSearchTimer=null;
+var allBrandsCache=null;
+
+function loadAllBrands(cb){
+  if(allBrandsCache){cb(allBrandsCache);return;}
+  fetch('https://vpic.nhtsa.dot.gov/api/vehicles/getallmakes?format=json')
+    .then(function(r){return r.json();})
+    .then(function(d){
+      allBrandsCache=(d.Results||[]).map(function(x){return x.Make_Name;}).sort();
+      cb(allBrandsCache);
+    })
+    .catch(function(){cb(BRANDS_POPULAR);});
 }
-function applyBrand() {
-  const inp = document.getElementById('brand-other');
-  if (inp && inp.value.trim()) {
-    const custom = inp.value.trim();
-    if (!sv.brands.includes(custom)) sv.brands.push(custom);
+
+function selectBrand(b){
+  var ac=gi('brand-ac');if(ac)ac.innerHTML='';
+  var bq=gi('brand-q');if(bq)bq.value='';
+  // ensure chip exists
+  var chips=gi('brand-chips');
+  if(chips&&!chips.querySelector('[data-v="'+b+'"]')){
+    var btn=document.createElement('button');
+    btn.className='chip';btn.setAttribute('data-v',b);btn.textContent=b;
+    btn.onclick=function(){
+      if(panelCtx==='s')toggleBrand(b,this);
+      else{pv.make=b;chips.querySelectorAll('.chip').forEach(function(c){c.classList.toggle('sel',c.getAttribute('data-v')===b);});}
+    };
+    chips.insertBefore(btn,chips.firstChild);
   }
-  const val = sv.brands.length ? sv.brands.join(', ') : '';
-  updateFbtn('brand','v-brand', val || 'Любая');
-  closePanel();
+  if(panelCtx==='s'){
+    var el=chips?chips.querySelector('[data-v="'+b+'"]'):null;
+    toggleBrand(b,el);
+  } else {
+    pv.make=b;pv.model='';
+    if(chips)chips.querySelectorAll('.chip').forEach(function(c){c.classList.toggle('sel',c.getAttribute('data-v')===b);});
+    applyPanel();
+    setTimeout(function(){openPanel('p','pmodel');},280);
+  }
+  if(chips)chips.querySelectorAll('.chip').forEach(function(c){c.style.display='';});
 }
 
-// Year
-function applyYear() {
-  sv.year_from = parseInt(document.getElementById('y-from').value)||'';
-  sv.year_to   = parseInt(document.getElementById('y-to').value)||'';
-  const label = sv.year_from&&sv.year_to ? `${sv.year_from}–${sv.year_to}` :
-                sv.year_from ? `от ${sv.year_from}` : sv.year_to ? `до ${sv.year_to}` : '';
-  updateFbtn('year','v-year', label || 'Любой');
-  closePanel();
-}
-
-// Price
-function setPresetMax(v, el) {
-  sv.price_to = v;
-  document.getElementById('p-to').value = v;
-  document.getElementById('price-chips').querySelectorAll('.chip').forEach(c=>c.classList.remove('sel'));
-  el.classList.add('sel');
-}
-function clearMaxChips() {
-  const chips = document.getElementById('price-chips');
-  if (chips) chips.querySelectorAll('.chip').forEach(c=>c.classList.remove('sel'));
-}
-function applyPrice() {
-  sv.price_from = parseInt(document.getElementById('p-from').value)||'';
-  sv.price_to   = parseInt(document.getElementById('p-to').value)||'';
-  const fmt = v => '€'+Number(v).toLocaleString('ru');
-  const label = sv.price_from&&sv.price_to ? `${fmt(sv.price_from)}–${fmt(sv.price_to)}` :
-                sv.price_from ? `от ${fmt(sv.price_from)}` : sv.price_to ? `до ${fmt(sv.price_to)}` : '';
-  updateFbtn('price','v-price', label || 'Любая');
-  closePanel();
-}
-
-// Generic single-select
-function pickS(key, el, val) {
-  sv[key] = val;
-  if (el && el.parentElement)
-    el.parentElement.querySelectorAll('.chip').forEach(c=>c.classList.remove('sel'));
-  el?.classList.add('sel');
-}
-
-// Trans with custom
-function applyTrans() {
-  const inp = document.getElementById('trans-other');
-  if (inp && inp.value.trim()) sv.transmission = inp.value.trim();
-  updateFbtn('trans','v-trans', sv.transmission || 'Любая');
-  closePanel();
-}
-
-// City with search
-function filterCities(q) {
-  const chips = document.getElementById('city-chips');
-  if (!chips) return;
-  chips.querySelectorAll('.chip').forEach(c => {
-    c.style.display = c.dataset.city.toLowerCase().includes(q.toLowerCase()) ? '' : 'none';
+function filterBrands(q){
+  var chips=gi('brand-chips');
+  var ac=gi('brand-ac');
+  if(!chips)return;
+  var lower=(q||'').toLowerCase();
+  chips.querySelectorAll('.chip').forEach(function(c){
+    c.style.display=!q||c.getAttribute('data-v').toLowerCase().indexOf(lower)>=0?'':'none';
   });
-}
-function pickCity(c, el) {
-  sv.city = c;
-  document.getElementById('city-chips').querySelectorAll('.chip').forEach(x=>x.classList.remove('sel'));
-  el.classList.add('sel');
-}
-function applyCity() {
-  const inp = document.getElementById('city-other');
-  if (inp && inp.value.trim() && !sv.city) sv.city = inp.value.trim();
-  updateFbtn('city','v-city', sv.city || 'Любой');
-  closePanel();
+  clearTimeout(brandSearchTimer);
+  if(q.length<2){ac.innerHTML='';return;}
+  ac.innerHTML='<div class="ac-hint">Поиск среди всех марок…</div>';
+  brandSearchTimer=setTimeout(function(){
+    loadAllBrands(function(all){
+      var re=new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'gi');
+      var matches=all.filter(function(b){return re.test(b);}).slice(0,15);
+      if(!matches.length){ac.innerHTML='<div class="ac-hint">Не найдено</div>';return;}
+      ac.innerHTML=matches.map(function(b){
+        var hl=b.replace(re,'<b>$&</b>');
+        return '<div class="ac-item" data-brand="'+b.replace(/"/g,'&quot;')+'">'+hl+'</div>';
+      }).join('');
+      ac.querySelectorAll('.ac-item').forEach(function(el){
+        el.onclick=function(){selectBrand(this.getAttribute('data-brand'));};
+      });
+    });
+  },400);
 }
 
-function updateFbtn(fb, v, label) {
-  const fbEl = document.getElementById('fb-'+fb);
-  document.getElementById(v).textContent = label;
-  const hasVal = label!=='Любая'&&label!=='Любой'&&label!=='Любое';
-  fbEl.classList.toggle('has-val', hasVal);
-}
-
-function updateSummary() {
-  const parts = [];
-  if (sv.brands.length)           parts.push(sv.brands.join(', '));
-  if (sv.year_from||sv.year_to)   parts.push((sv.year_from||'?')+' – '+(sv.year_to||'?'));
-  if (sv.price_from||sv.price_to) {
-    const fmt = v => v ? '€'+Number(v).toLocaleString('ru') : '?';
-    parts.push(fmt(sv.price_from)+' – '+fmt(sv.price_to));
+// ── MODEL AUTOCOMPLETE (NHTSA API) ──
+function buildModelSearch(currentVal,currentBrand,stateKey){
+  var ph=currentBrand?currentBrand+': введите модель…':'Сначала выберите марку или введите вручную…';
+  var html='<div class="search-box"><input class="inp" id="model-q" placeholder="'+ph+'" value="'+currentVal+'" autocomplete="off" oninput="filterModels(this.value,\''+stateKey+'\')"></div>'
+    +'<div class="ac-list" id="model-ac"><div class="ac-hint" id="model-hint">'+(currentBrand?'Загрузка моделей…':'Выберите марку чтобы увидеть модели')+'</div></div>';
+  if(currentBrand){
+    fetchModels(currentBrand,function(models){
+      var mc=gi('model-ac');if(!mc)return;
+      if(!models.length){mc.innerHTML='<div class="ac-hint">Модели не найдены</div>';return;}
+      var cur=gi('model-q')?gi('model-q').value:'';
+      renderModelChips(models,cur,stateKey);
+    });
   }
-  if (sv.fuel)           parts.push(sv.fuel);
-  if (sv.transmission)   parts.push(sv.transmission);
-  if (sv.city)           parts.push(sv.city);
-  const el = document.getElementById('summary-text');
-  el.textContent = parts.length ? parts.join(' · ') : 'ничего не выбрано';
-  el.style.fontStyle = parts.length ? 'normal' : 'italic';
-  el.style.color = parts.length ? 'var(--text)' : 'var(--hint)';
+  return html;
 }
 
-function resetFilters() {
-  Object.assign(sv, {brands:[], year_from:'', year_to:'', price_from:'', price_to:'', fuel:'', transmission:'', city:''});
-  [['brand','v-brand','Любая'],['year','v-year','Любой'],['price','v-price','Любая'],
-   ['fuel','v-fuel','Любое'],['trans','v-trans','Любая'],['city','v-city','Любой']
-  ].forEach(([fb,v,d]) => updateFbtn(fb,v,d));
-  updateSummary();
+function renderModelChips(models,q,stateKey){
+  var mc=gi('model-ac');if(!mc)return;
+  var lower=(q||'').toLowerCase();
+  var filtered=lower?models.filter(function(m){return m.toLowerCase().indexOf(lower)>=0;}):models;
+  if(!filtered.length){mc.innerHTML='<div class="ac-hint">Ничего не найдено</div>';return;}
+  var curVal=stateKey==='sv'?sv.model:pv.model;
+  mc.innerHTML='<div class="chips" style="padding:10px;gap:8px;" id="model-chips">'
+    +filtered.slice(0,80).map(function(m){
+      return '<button class="chip'+(curVal===m?' sel':'')+'" data-v="'+m.replace(/"/g,'&quot;')+'" onclick="pickModel(\''+m.replace(/'/g,"\\'")+"',this,'"+stateKey+"')\">"+m+'</button>';
+    }).join('')+'</div>'
+    +(filtered.length>80?'<div class="ac-hint">Уточните запрос — показано 80 из '+filtered.length+'</div>':'');
 }
 
-function doSearch() {
-  const data = {
-    action:'search',
-    brands: sv.brands.length ? sv.brands : null,
-    year_from: sv.year_from||null, year_to: sv.year_to||null,
-    price_from: sv.price_from||null, price_to: sv.price_to||null,
-    fuel: sv.fuel||null, transmission: sv.transmission||null, city: sv.city||null
-  };
-  tg.sendData(JSON.stringify(data));
-}
-
-// ── PUBLISH STATE ──
-const pub = {make:'',model:'',year:'',mileage:'',price:'',fuel:'',transmission:'',engine:'',city:'',phone:'',description:''};
-
-function pickChip(key, el, val) {
-  pub[key] = val;
-  const container = el.closest('.form-chips');
-  if (container) container.querySelectorAll('.form-chip').forEach(c=>c.classList.remove('sel'));
-  el.classList.add('sel');
-}
-function clearGroupChips(containerId) {
-  document.getElementById(containerId)?.querySelectorAll('.form-chip').forEach(c=>c.classList.remove('sel'));
-}
-
-// Build year chips
-(function(){
-  const el = document.getElementById('chips-year-pub');
-  if (!el) return;
-  const cur = new Date().getFullYear();
-  el.innerHTML = Array.from({length:12},(_,i)=>cur-i).map(y=>
-    `<button class="form-chip" onclick="pickChip('year',this,${y})">${y}</button>`
-  ).join('');
-})();
-
-function doPublish() {
-  const makeCustom = document.getElementById('f-make-custom').value.trim();
-  if (makeCustom) pub.make = makeCustom;
-  pub.model = document.getElementById('f-model').value.trim();
-  const yearCustom = document.getElementById('f-year-custom').value.trim();
-  if (yearCustom) pub.year = yearCustom;
-  pub.mileage = document.getElementById('f-mileage').value.trim();
-  pub.price   = document.getElementById('f-price').value.trim();
-  const transCustom = document.getElementById('f-trans-custom').value.trim();
-  if (transCustom) pub.transmission = transCustom;
-  const engCustom = document.getElementById('f-engine-custom').value.trim();
-  if (engCustom) pub.engine = engCustom;
-  const cityCustom = document.getElementById('f-city-custom').value.trim();
-  if (cityCustom) pub.city = cityCustom;
-  pub.phone = document.getElementById('f-phone').value.trim();
-  pub.description = document.getElementById('f-description').value.trim();
-
-  const required = [
-    [pub.make,'Марка'],[pub.model,'Модель'],[pub.year,'Год выпуска'],
-    [pub.mileage,'Пробег'],[pub.price,'Цена'],[pub.fuel,'Топливо'],
-    [pub.transmission,'Коробка передач'],[pub.city,'Город'],[pub.description,'Описание'],
-  ];
-  for (const [val,label] of required) {
-    if (!val) { tg.showAlert(`Заполните поле: ${label}`); return; }
+function filterModels(q,stateKey){
+  var brand=panelCtx==='s'?sv.brands[0]:pv.make;
+  if(!brand){
+    // free search across all cached
+    var allModels=[];
+    Object.keys(modelsCache).forEach(function(k){allModels=allModels.concat(modelsCache[k]);});
+    if(q.length>=2) renderModelChips(allModels.filter(function(m,i,a){return a.indexOf(m)===i;}),q,stateKey);
+    return;
   }
-  if (pub.description.length < 15) { tg.showAlert('Описание слишком короткое.'); return; }
-
-  tg.sendData(JSON.stringify({
-    action:'publish',
-    make:pub.make, model:pub.model, year:parseInt(pub.year),
-    mileage:parseInt(pub.mileage), price:parseInt(pub.price),
-    fuel:pub.fuel, transmission:pub.transmission,
-    engine:pub.engine||'', city:pub.city,
-    phone:pub.phone, description:pub.description,
-  }));
+  if(modelsCache[brand]){
+    renderModelChips(modelsCache[brand],q,stateKey);
+  } else {
+    fetchModels(brand,function(models){renderModelChips(models,q,stateKey);});
+  }
 }
 
-// ── TABS ──
-function showTab(name) {
-  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
-  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-  document.getElementById('screen-'+name).classList.add('active');
-  document.getElementById('tab-'+name).classList.add('active');
+function pickModel(m,el,stateKey){
+  if(stateKey==='sv')sv.model=m;else pv.model=m;
+  var mq=gi('model-q');if(mq)mq.value=m;
+  var chips=gi('model-chips');
+  if(chips){chips.querySelectorAll('.chip').forEach(function(c){c.classList.toggle('sel',c.getAttribute('data-v')===m);});}
 }
-const initTab = new URLSearchParams(window.location.search).get('tab')||'search';
-showTab(initTab);
+
+// ── NOMINATIM CITY ──
+var nomTimer=null;
+function nomSearch(q,resId,onSelect){
+  var res=gi(resId);
+  clearTimeout(nomTimer);
+  if(!q||q.length<2){res.innerHTML='';return;}
+  res.innerHTML='<div class="ac-hint">Поиск…</div>';
+  nomTimer=setTimeout(function(){
+    fetch('https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=6&countrycodes=nl&q='+encodeURIComponent(q),{headers:{'Accept-Language':'ru'}})
+      .then(function(r){return r.json();})
+      .then(function(data){
+        if(!data.length){res.innerHTML='<div class="ac-hint">Ничего не найдено</div>';return;}
+        res.innerHTML=data.map(function(d){
+          var name=d.address.city||d.address.town||d.address.village||d.address.municipality||d.name;
+          var sub=[d.address.state,d.address.country].filter(Boolean).join(', ');
+          return '<div class="ac-item"><div>'+name+'</div>'+(sub?'<div class="ac-sub">'+sub+'</div>':'')+'</div>';
+        }).join('');
+        res.querySelectorAll('.ac-item').forEach(function(el,i){
+          var d=data[i];
+          var name=d.address.city||d.address.town||d.address.village||d.address.municipality||d.name;
+          el.onclick=function(){onSelect(name);res.innerHTML='';};
+        });
+      })
+      .catch(function(){res.innerHTML='<div class="ac-hint">Ошибка поиска</div>';});
+  },350);
+}
+
+// ── ENGINE LABEL ──
+function engineLabel(){
+  if(!pv.engine&&!pv.turbo)return'Не указан';
+  var parts=[];
+  if(pv.engine)parts.push(pv.engine+' л');
+  if(pv.turbo)parts.push('Турбо');
+  return parts.join(' · ');
+}
+
+// ── PANELS ──
+var PDEFS={
+  's_brand':{title:'Марка (можно несколько)',
+    reset:function(){sv.brands=[];updS('brand','sv-brand','Любая');},
+    build:function(){return buildBrandSearch(sv.brands,true);},
+    apply:function(){updS('brand','sv-brand',sv.brands.length?sv.brands.join(', '):'Любая');}
+  },
+  's_model':{title:'Модель',
+    reset:function(){sv.model='';updS('model','sv-model','Любая');},
+    build:function(){return buildModelSearch(sv.model,sv.brands[0],'sv');},
+    apply:function(){var v=(gi('model-q')||{value:''}).value.trim();if(v)sv.model=v;updS('model','sv-model',sv.model||'Любая');}
+  },
+  's_year':{title:'Год выпуска',
+    reset:function(){sv.year_from='';sv.year_to='';updS('year','sv-year','Любой');},
+    build:function(){
+      return '<div class="field-label">Диапазон:</div><div class="range-row"><input class="inp" id="p-yf" type="number" placeholder="От" value="'+sv.year_from+'" min="1990" max="'+CUR_YEAR+'"><input class="inp" id="p-yt" type="number" placeholder="До" value="'+sv.year_to+'" min="1990" max="'+CUR_YEAR+'"></div>';
+    },
+    apply:function(){
+      sv.year_from=+gi('p-yf').value||'';sv.year_to=+gi('p-yt').value||'';
+      var l=sv.year_from&&sv.year_to?sv.year_from+'–'+sv.year_to:sv.year_from?'от '+sv.year_from:sv.year_to?'до '+sv.year_to:'';
+      updS('year','sv-year',l||'Любой');
+    }
+  },
+  's_price':{title:'Цена (€)',
+    reset:function(){sv.price_from='';sv.price_to='';updS('price','sv-price','Любая');},
+    build:function(){
+      var pre=[[5000,'5 000'],[10000,'10 000'],[15000,'15 000'],[20000,'20 000'],[30000,'30 000'],[50000,'50 000']];
+      var c='<div class="chips" id="pp">'+pre.map(function(x){return '<button class="chip'+(sv.price_to==x[0]?' sel':'')+'" onclick="setMax('+x[0]+',this)">до €'+x[1]+'</button>';}).join('')+'</div>';
+      return '<div class="field-label">Диапазон:</div><div class="range-row"><input class="inp" id="p-pf" type="number" placeholder="От €" value="'+sv.price_from+'" oninput="ccs(\'pp\')"><input class="inp" id="p-pt" type="number" placeholder="До €" value="'+sv.price_to+'" oninput="ccs(\'pp\')"></div><div class="field-label">Быстрый максимум:</div>'+c;
+    },
+    apply:function(){
+      sv.price_from=+gi('p-pf').value||'';sv.price_to=+gi('p-pt').value||'';
+      function f(v){return v?'€'+Number(v).toLocaleString('ru'):'?';}
+      var l=sv.price_from&&sv.price_to?f(sv.price_from)+'–'+f(sv.price_to):sv.price_from?'от '+f(sv.price_from):sv.price_to?'до '+f(sv.price_to):'';
+      updS('price','sv-price',l||'Любая');
+    }
+  },
+  's_fuel':{title:'Топливо',
+    reset:function(){sv.fuel='';updS('fuel','sv-fuel','Любое');},
+    build:function(){
+      var c='<div class="chips">';
+      FUELS.forEach(function(f){c+='<button class="chip'+(sv.fuel===f?' sel':'')+'" onclick="p1c(\'sv\',\'fuel\',\''+f+'\',this)">'+f+'</button>';});
+      return c+'</div>';
+    },
+    apply:function(){updS('fuel','sv-fuel',sv.fuel||'Любое');}
+  },
+  's_trans':{title:'Коробка передач',
+    reset:function(){sv.transmission='';updS('trans','sv-trans','Любая');},
+    build:function(){
+      var c='<div class="chips">';
+      TRANS.forEach(function(t){c+='<button class="chip'+(sv.transmission===t?' sel':'')+'" onclick="p1c(\'sv\',\'transmission\',\''+t+'\',this)">'+t+'</button>';});
+      return c+'</div><div class="field-label">Или вручную:</div><input class="inp" id="pi" placeholder="Другая…" value="'+(TRANS.indexOf(sv.transmission)<0?sv.transmission:'')+'">';
+    },
+    apply:function(){var v=(gi('pi')||{value:''}).value.trim();if(v)sv.transmission=v;updS('trans','sv-trans',sv.transmission||'Любая');}
+  },
+  's_city':{title:'Город',
+    reset:function(){sv.city='';updS('city','sv-city','Любой');},
+    build:function(){
+      return '<div class="search-box"><input class="inp" id="city-inp" placeholder="Начните вводить город…" value="'+sv.city+'" autocomplete="off" oninput="nomSearch(this.value,\'city-res\',function(v){sv.city=v;gi(\'city-inp\').value=v;})"></div>'
+        +'<div class="ac-list" id="city-res"></div>'
+        +'<div class="field-label">Популярные:</div>'
+        +'<div class="chips">'+POP_CITIES.map(function(c){return '<button class="chip'+(sv.city===c?' sel':'')+'" onclick="sv.city=\''+c+'\';gi(\'city-inp\').value=\''+c+'\';gi(\'city-res\').innerHTML=\'\';this.closest(\'.chips\').querySelectorAll(\'.chip\').forEach(function(x){x.classList.remove(\'sel\')});this.classList.add(\'sel\')">'+c+'</button>';}).join('')+'</div>';
+    },
+    apply:function(){var v=(gi('city-inp')||{value:''}).value.trim();if(v)sv.city=v;updS('city','sv-city',sv.city||'Любой');}
+  },
+
+  'p_make':{title:'Марка',
+    reset:function(){pv.make='';pv.model='';updP('make','pv-make','Выбрать');updP('pmodel','pv-pmodel','Ввести');},
+    build:function(){return buildBrandSearch(pv.make,false);},
+    apply:function(){updP('make','pv-make',pv.make||'Выбрать');}
+  },
+  'p_pmodel':{title:'Модель',
+    reset:function(){pv.model='';updP('pmodel','pv-pmodel','Ввести');},
+    build:function(){return buildModelSearch(pv.model,pv.make,'pv');},
+    apply:function(){var v=(gi('model-q')||{value:''}).value.trim();if(v)pv.model=v;updP('pmodel','pv-pmodel',pv.model||'Ввести');}
+  },
+  'p_pyear':{title:'Год выпуска',
+    reset:function(){pv.year='';updP('pyear','pv-pyear','Выбрать');},
+    build:function(){
+      var yrs=[],i;for(i=0;i<15;i++)yrs.push(CUR_YEAR-i);
+      var c='<div class="chips">';
+      yrs.forEach(function(y){c+='<button class="chip'+(pv.year==y?' sel':'')+'" onclick="pp1c(\'year\','+y+',this)">'+y+'</button>';});
+      return c+'</div><div class="field-label">Другой год:</div><input class="inp" id="pi" type="number" placeholder="Год…" min="1970" max="'+CUR_YEAR+'">';
+    },
+    apply:function(){var v=(gi('pi')||{value:''}).value.trim();if(v)pv.year=v;updP('pyear','pv-pyear',pv.year||'Выбрать');}
+  },
+  'p_mileage':{title:'Пробег (км)',
+    reset:function(){pv.mileage='';updP('mileage','pv-mileage','Ввести');},
+    build:function(){
+      var pre=[[0,'0 — новый'],[30000,'30 000'],[60000,'60 000'],[100000,'100 000'],[150000,'150 000'],[200000,'200 000']];
+      var c='<div class="chips" id="milpre">'+pre.map(function(x){return '<button class="chip'+(pv.mileage===x[0]||pv.mileage==x[0]?' sel':'')+'" onclick="pv.mileage='+x[0]+';ccs(\'milpre\');this.classList.add(\'sel\')">'+x[1]+'</button>';}).join('')+'</div>';
+      return c+'<div class="field-label">Или введите:</div><input class="inp" id="pi" type="number" placeholder="км" value="'+pv.mileage+'" oninput="ccs(\'milpre\')">';
+    },
+    apply:function(){var v=(gi('pi')||{value:''}).value.trim();if(v!=='')pv.mileage=v;updP('mileage','pv-mileage',pv.mileage!==''?Number(pv.mileage).toLocaleString('ru')+' км':'Ввести');}
+  },
+  'p_pprice':{title:'Цена (€)',
+    reset:function(){pv.price='';updP('pprice','pv-pprice','Ввести');},
+    build:function(){
+      var pre=[[5000,'5 000'],[8000,'8 000'],[10000,'10 000'],[15000,'15 000'],[20000,'20 000'],[30000,'30 000'],[50000,'50 000']];
+      var c='<div class="chips" id="prpre">'+pre.map(function(x){return '<button class="chip'+(pv.price==x[0]?' sel':'')+'" onclick="pv.price='+x[0]+';ccs(\'prpre\');this.classList.add(\'sel\')">'+x[1]+'</button>';}).join('')+'</div>';
+      return c+'<div class="field-label">Или введите:</div><input class="inp" id="pi" type="number" placeholder="€" value="'+pv.price+'" oninput="ccs(\'prpre\')">';
+    },
+    apply:function(){var v=(gi('pi')||{value:''}).value.trim();if(v)pv.price=v;updP('pprice','pv-pprice',pv.price?'€'+Number(pv.price).toLocaleString('ru'):'Ввести');}
+  },
+  'p_pfuel':{title:'Топливо',
+    reset:function(){pv.fuel='';updP('pfuel','pv-pfuel','Выбрать');},
+    build:function(){
+      var c='<div class="chips">';
+      FUELS.forEach(function(f){c+='<button class="chip'+(pv.fuel===f?' sel':'')+'" onclick="pp1c(\'fuel\',\''+f+'\',this)">'+f+'</button>';});
+      return c+'</div>';
+    },
+    apply:function(){updP('pfuel','pv-pfuel',pv.fuel||'Выбрать');}
+  },
+  'p_ptrans':{title:'Коробка передач',
+    reset:function(){pv.transmission='';updP('ptrans','pv-ptrans','Выбрать');},
+    build:function(){
+      var c='<div class="chips">';
+      TRANS.forEach(function(t){c+='<button class="chip'+(pv.transmission===t?' sel':'')+'" onclick="pp1c(\'transmission\',\''+t+'\',this)">'+t+'</button>';});
+      return c+'</div><div class="field-label">Или вручную:</div><input class="inp" id="pi" placeholder="Другая…" value="'+(TRANS.indexOf(pv.transmission)<0?pv.transmission:'')+'">';
+    },
+    apply:function(){var v=(gi('pi')||{value:''}).value.trim();if(v)pv.transmission=v;updP('ptrans','pv-ptrans',pv.transmission||'Выбрать');}
+  },
+  'p_engine':{title:'Двигатель',
+    reset:function(){pv.engine='';pv.turbo=false;updP('engine','pv-engine','Не указан');},
+    build:function(){
+      var c='<div class="field-label">Объём:</div><div class="chips" id="eng-chips">';
+      ENGINES.forEach(function(e){c+='<button class="chip'+(pv.engine===e?' sel':'')+'" data-v="'+e+'" onclick="pv.engine=\''+e+'\';ccs(\'eng-chips\');this.classList.add(\'sel\')">'+e+' л</button>';});
+      c+='</div>';
+      c+='<div class="field-label">Или введите (л):</div><input class="inp" id="pi" placeholder="Например: 2.2" value="'+(ENGINES.indexOf(pv.engine)<0?pv.engine:'')+'" oninput="ccs(\'eng-chips\')">';
+      c+='<div class="field-label">Наддув:</div><div class="chips">'
+        +'<button class="chip turbo-chip'+(pv.turbo?' sel':'')+'" id="turbo-chip" onclick="pv.turbo=!pv.turbo;this.classList.toggle(\'sel\')">Турбо</button>'
+        +'<button class="chip'+(pv.turbo===false&&pv.engine?' sel':'')+'" onclick="pv.turbo=false;gi(\'turbo-chip\').classList.remove(\'sel\')">Атмосферный</button>'
+        +'</div>';
+      return c;
+    },
+    apply:function(){
+      var v=(gi('pi')||{value:''}).value.trim();
+      if(v)pv.engine=v;
+      updP('engine','pv-engine',engineLabel());
+    }
+  },
+  'p_pcity':{title:'Город',
+    reset:function(){pv.city='';updP('pcity','pv-pcity','Выбрать');},
+    build:function(){
+      return '<div class="search-box"><input class="inp" id="city-inp" placeholder="Начните вводить город…" value="'+pv.city+'" autocomplete="off" oninput="nomSearch(this.value,\'city-res\',function(v){pv.city=v;gi(\'city-inp\').value=v;})"></div>'
+        +'<div class="ac-list" id="city-res"></div>'
+        +'<div class="field-label">Популярные:</div>'
+        +'<div class="chips">'+POP_CITIES.map(function(c){return '<button class="chip'+(pv.city===c?' sel':'')+'" onclick="pv.city=\''+c+'\';gi(\'city-inp\').value=\''+c+'\';gi(\'city-res\').innerHTML=\'\';this.closest(\'.chips\').querySelectorAll(\'.chip\').forEach(function(x){x.classList.remove(\'sel\')});this.classList.add(\'sel\')">'+c+'</button>';}).join('')+'</div>';
+    },
+    apply:function(){var v=(gi('city-inp')||{value:''}).value.trim();if(v)pv.city=v;updP('pcity','pv-pcity',pv.city||'Выбрать');}
+  },
+  'p_desc':{title:'Описание',
+    reset:function(){pv.description='';updP('desc','pv-desc','Написать');},
+    build:function(){
+      return '<textarea class="inp" id="pi" rows="8" placeholder="Расскажите о состоянии, комплектации, истории обслуживания…">'+pv.description+'</textarea>'
+        +'<div style="margin-top:10px;font-size:12px;color:var(--hint);margin-bottom:6px;">ИИ улучшит грамматику, стиль и сделает объявление привлекательнее</div>'
+        +'<button class="btn btn-ai" onclick="aiImprove()">✨ Улучшить с ИИ</button>';
+    },
+    apply:function(){
+      pv.description=(gi('pi').value||'').trim();
+      updP('desc','pv-desc',pv.description?pv.description.slice(0,32)+(pv.description.length>32?'…':''):'Написать');
+    }
+  },
+  'p_phone':{title:'Телефон',
+    reset:function(){pv.phone='';updP('phone','pv-phone','Не указан');},
+    build:function(){return '<input class="inp" id="pi" type="tel" placeholder="+31 6 12345678" value="'+pv.phone+'">';},
+    apply:function(){pv.phone=(gi('pi').value||'').trim();updP('phone','pv-phone',pv.phone||'Не указан');}
+  }
+};
+
+function openPanel(ctx,key){
+  panelCtx=ctx;panelKey=key;
+  var def=PDEFS[ctx+'_'+key];if(!def)return;
+  gi('panel-title').textContent=def.title;
+  gi('panel-body').innerHTML=def.build();
+  gi('panel-apply').innerHTML='<button class="btn btn-primary" onclick="applyPanel()">Применить</button>';
+  gi('panel').classList.add('open');
+}
+function closePanel(){gi('panel').classList.remove('open');updateSummary();}
+function applyPanel(){var d=PDEFS[panelCtx+'_'+panelKey];if(d)d.apply();closePanel();}
+function resetPanel(){var d=PDEFS[panelCtx+'_'+panelKey];if(d)d.reset();closePanel();}
+
+function toggleBrand(b,el){
+  var i=sv.brands.indexOf(b);
+  if(i>=0){sv.brands.splice(i,1);if(el)el.classList.remove('sel');}
+  else{sv.brands.push(b);if(el)el.classList.add('sel');}
+}
+function ccs(id){var e=gi(id);if(e)e.querySelectorAll('.chip').forEach(function(c){c.classList.remove('sel');});}
+function setMax(v,el){sv.price_to=v;var e=gi('p-pt');if(e)e.value=v;ccs('pp');el.classList.add('sel');}
+function p1c(obj,key,val,el){
+  window[obj][key]=val;
+  var p=el.closest('.chips');if(p)p.querySelectorAll('.chip').forEach(function(c){c.classList.remove('sel');});
+  el.classList.add('sel');applyPanel();
+}
+function pp1c(key,val,el){
+  pv[key]=val;
+  var p=el.closest('.chips');if(p)p.querySelectorAll('.chip').forEach(function(c){c.classList.remove('sel');});
+  el.classList.add('sel');applyPanel();
+}
+
+function aiImprove(){
+  var txt=(gi('pi').value||'').trim();
+  if(txt.length<10){tg.showAlert('Сначала напишите описание.');return;}
+  pv.description=txt;
+  tg.sendData(JSON.stringify({action:'ai_improve_desc',text:txt}));
+}
+
+function updS(key,vid,label){
+  gi(vid).textContent=label;
+  gi('sfb-'+key).classList.toggle('has-val',['Любая','Любой','Любое'].indexOf(label)<0);
+}
+function updP(key,vid,label){
+  gi(vid).textContent=label;
+  var fb=gi('pfb-'+key);
+  if(fb)fb.classList.toggle('has-val',['Выбрать','Ввести','Не указан','Написать'].indexOf(label)<0);
+}
+function updateSummary(){
+  var parts=[];
+  if(sv.brands.length)parts.push(sv.brands.join(', '));
+  if(sv.model)parts.push(sv.model);
+  if(sv.year_from||sv.year_to)parts.push((sv.year_from||'?')+'–'+(sv.year_to||'?'));
+  if(sv.price_from||sv.price_to){function f(v){return v?'€'+Number(v).toLocaleString('ru'):'?';}parts.push(f(sv.price_from)+'–'+f(sv.price_to));}
+  if(sv.fuel)parts.push(sv.fuel);
+  if(sv.transmission)parts.push(sv.transmission);
+  if(sv.city)parts.push(sv.city);
+  var el=gi('s-summary');
+  el.textContent=parts.length?parts.join(' · '):'ничего не выбрано';
+  el.style.fontStyle=parts.length?'normal':'italic';
+  el.style.color=parts.length?'var(--text)':'var(--hint)';
+}
+function resetSearch(){
+  sv={brands:[],model:'',year_from:'',year_to:'',price_from:'',price_to:'',fuel:'',transmission:'',city:''};
+  ['brand|sv-brand|Любая','model|sv-model|Любая','year|sv-year|Любой','price|sv-price|Любая','fuel|sv-fuel|Любое','trans|sv-trans|Любая','city|sv-city|Любой'].forEach(function(s){var p=s.split('|');updS(p[0],p[1],p[2]);});
+}
+function doSearch(){
+  tg.sendData(JSON.stringify({action:'search',brands:sv.brands.length?sv.brands:null,model:sv.model||null,year_from:sv.year_from||null,year_to:sv.year_to||null,price_from:sv.price_from||null,price_to:sv.price_to||null,fuel:sv.fuel||null,transmission:sv.transmission||null,city:sv.city||null}));
+}
+function doPublish(){
+  var req=[['make','Марка'],['model','Модель'],['year','Год'],['mileage','Пробег'],['price','Цена'],['fuel','Топливо'],['transmission','Коробка'],['city','Город'],['description','Описание']];
+  for(var i=0;i<req.length;i++){if(!pv[req[i][0]]&&pv[req[i][0]]!==0){tg.showAlert('Заполните: '+req[i][1]);return;}}
+  if((pv.description||'').length<15){tg.showAlert('Описание слишком короткое.');return;}
+  tg.sendData(JSON.stringify({action:'publish',make:pv.make,model:pv.model,year:+pv.year,mileage:+pv.mileage,price:+pv.price,fuel:pv.fuel,transmission:pv.transmission,engine:pv.engine||null,turbo:pv.turbo,city:pv.city,description:pv.description,phone:pv.phone||null}));
+}
+
+var MOCK=[
+  {id:1,make:'Volkswagen',model:'Passat',year:2019,price:14500,mileage:87000,city:'Amsterdam',status:'active',days_left:22},
+  {id:2,make:'Toyota',model:'Camry',year:2018,price:17900,mileage:65000,city:'Rotterdam',status:'hidden',days_left:14},
+  {id:3,make:'BMW',model:'3 Series',year:2016,price:21000,mileage:110000,city:'Utrecht',status:'active',days_left:2}
+];
+function renderMyListings(){
+  var el=gi('my-list');
+  if(!MOCK.length){el.innerHTML='<div class="empty"><div class="empty-ico">🚗</div><div class="empty-title">Нет объявлений</div><div class="empty-sub">Подайте первое объявление и оно появится здесь</div></div><button class="btn btn-primary" onclick="showTab(\'publish\')">📝 Подать объявление</button>';return;}
+  el.innerHTML=MOCK.map(function(l){
+    var sc=l.status==='hidden'?'status-hidden':l.days_left<=3?'status-expired':'status-active';
+    var st=l.status==='hidden'?'🙈 Скрыто':l.days_left<=3?'⏰ '+l.days_left+' дн.':'✅ '+l.days_left+' дн.';
+    return '<div class="listing-card"><div class="listing-card-header"><div class="listing-title">'+l.make+' '+l.model+' '+l.year+'</div><div class="listing-meta">📍 '+l.city+' · 🛣 '+Number(l.mileage).toLocaleString('ru')+' км</div><div class="listing-price">€'+Number(l.price).toLocaleString('ru')+'</div><span class="listing-status '+sc+'">'+st+'</span></div><div class="listing-actions"><button class="la-btn" onclick="act(\'edit\','+l.id+')">✏️ Изменить</button><button class="la-btn" onclick="act(\''+(l.status==='hidden'?'unhide':'hide')+'\','+l.id+')">'+(l.status==='hidden'?'👁 Показать':'🙈 Скрыть')+'</button><button class="la-btn" onclick="act(\'extend\','+l.id+')">🔄 Продлить</button><button class="la-btn red" onclick="act(\'delete\','+l.id+')">🗑 Удалить</button></div></div>';
+  }).join('');
+}
+function act(a,id){tg.sendData(JSON.stringify({action:a,id:id}));}
+
+function showTab(name){
+  document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active');});
+  document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('active');});
+  gi('screen-'+name).classList.add('active');
+  gi('tab-'+name).classList.add('active');
+  if(name==='my')renderMyListings();
+}
+showTab((new URLSearchParams(location.search)).get('tab')||'search');
 </script>
 </body>
 </html>
