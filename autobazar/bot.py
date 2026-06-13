@@ -10,7 +10,10 @@ from urllib.parse import quote
 import anthropic
 from dotenv import load_dotenv
 from aiohttp import web as aio_web
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, Update, WebAppInfo
+from telegram import (
+    InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, Update,
+    WebAppInfo, KeyboardButton, ReplyKeyboardMarkup,
+)
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -187,20 +190,7 @@ def search_price_keyboard() -> InlineKeyboardMarkup:
 
 
 def main_menu_keyboard():
-    if WEBAPP_URL:
-        return InlineKeyboardMarkup([
-            [InlineKeyboardButton(
-                "🚗 Разместить объявление",
-                web_app=WebAppInfo(url=f"{WEBAPP_URL}/webapp?tab=publish"),
-            )],
-            [
-                InlineKeyboardButton(
-                    "🔍 Поиск авто",
-                    web_app=WebAppInfo(url=f"{WEBAPP_URL}/webapp?tab=search"),
-                ),
-                InlineKeyboardButton("📋 Мои объявления", callback_data="my_listings"),
-            ],
-        ])
+    """Inline keyboard — используется только когда нет WEBAPP_URL."""
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🚗 Разместить объявление", callback_data="new_listing")],
         [
@@ -208,6 +198,21 @@ def main_menu_keyboard():
             InlineKeyboardButton("📋 Мои объявления", callback_data="my_listings"),
         ],
     ])
+
+
+def webapp_keyboard():
+    """ReplyKeyboard с WebApp-кнопками — sendData работает только отсюда."""
+    if not WEBAPP_URL:
+        return None
+    return ReplyKeyboardMarkup(
+        [[
+            KeyboardButton("🚗 Подать объявление", web_app=WebAppInfo(url=f"{WEBAPP_URL}/webapp?tab=publish")),
+            KeyboardButton("🔍 Поиск авто",         web_app=WebAppInfo(url=f"{WEBAPP_URL}/webapp?tab=search")),
+            KeyboardButton("📋 Мои авто",            web_app=WebAppInfo(url=f"{WEBAPP_URL}/webapp?tab=my")),
+        ]],
+        resize_keyboard=True,
+        input_field_placeholder="Выберите действие",
+    )
 
 
 def fuel_keyboard():
@@ -444,15 +449,16 @@ async def delete_from_channel(context, message_ids: list):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     name = update.effective_user.first_name
+    kb = webapp_keyboard()
     await update.message.reply_text(
         f"👋 Привет, {name}!\n\n"
         "Добро пожаловать в <b>AutoBazar NL</b> — маркетплейс автомобилей.\n\n"
         "Здесь вы можете:\n"
-        "• 📝 Подать объявление о продаже\n"
+        "• 🚗 Подать объявление о продаже\n"
         "• 🔍 Найти нужный автомобиль\n"
         "• 📋 Управлять своими объявлениями",
         parse_mode="HTML",
-        reply_markup=main_menu_keyboard(),
+        reply_markup=kb if kb else main_menu_keyboard(),
     )
 
 
@@ -461,16 +467,20 @@ async def go_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     context.user_data.clear()
     name = query.from_user.first_name
-    await query.edit_message_text(
+    kb = webapp_keyboard()
+    text = (
         f"👋 Привет, {name}!\n\n"
         "Добро пожаловать в <b>AutoBazar NL</b> — маркетплейс автомобилей.\n\n"
         "Здесь вы можете:\n"
-        "• 📝 Подать объявление о продаже\n"
+        "• 🚗 Подать объявление о продаже\n"
         "• 🔍 Найти нужный автомобиль\n"
-        "• 📋 Управлять своими объявлениями",
-        parse_mode="HTML",
-        reply_markup=main_menu_keyboard(),
+        "• 📋 Управлять своими объявлениями"
     )
+    if kb:
+        await query.edit_message_text(text, parse_mode="HTML")
+        await query.message.reply_text("🏠 Главное меню:", reply_markup=kb)
+    else:
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=main_menu_keyboard())
 
 
 # ====== ПОДАЧА ОБЪЯВЛЕНИЯ ======
@@ -1576,6 +1586,85 @@ async def _healthcheck(request: aio_web.Request) -> aio_web.Response:
     return aio_web.Response(text="OK")
 
 
+def _cors(response: aio_web.Response) -> aio_web.Response:
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    return response
+
+
+async def _api_listings(request: aio_web.Request) -> aio_web.Response:
+    """GET /api/listings?user_id=123  — объявления пользователя для Mini App."""
+    if request.method == "OPTIONS":
+        return _cors(aio_web.Response(text=""))
+    try:
+        user_id = int(request.rel_url.query.get("user_id", 0))
+    except ValueError:
+        return _cors(aio_web.Response(status=400, text="bad user_id"))
+    if not user_id:
+        return _cors(aio_web.Response(status=400, text="user_id required"))
+
+    rows = await get_user_listings(user_id)
+    listings = []
+    for r in rows:
+        from datetime import date
+        expires = r.get("expires_at", "")
+        days_left = 0
+        if expires:
+            try:
+                exp_date = date.fromisoformat(str(expires)[:10])
+                days_left = max(0, (exp_date - date.today()).days)
+            except Exception:
+                pass
+        listings.append({
+            "id":        r["id"],
+            "make":      r.get("make", ""),
+            "model":     r.get("model", ""),
+            "year":      r.get("year", ""),
+            "price":     r.get("price", 0),
+            "mileage":   r.get("mileage", 0),
+            "city":      r.get("city", ""),
+            "status":    r.get("status", "active"),
+            "days_left": days_left,
+        })
+    return _cors(aio_web.Response(
+        content_type="application/json",
+        text=json.dumps(listings, ensure_ascii=False),
+    ))
+
+
+async def _api_ai_improve(request: aio_web.Request) -> aio_web.Response:
+    """POST /api/ai_improve  — улучшить описание через Claude."""
+    if request.method == "OPTIONS":
+        return _cors(aio_web.Response(text=""))
+    try:
+        body = await request.json()
+        text = (body.get("text") or "").strip()
+    except Exception:
+        return _cors(aio_web.Response(status=400, text="bad json"))
+    if len(text) < 10:
+        return _cors(aio_web.Response(status=400, text="text too short"))
+
+    try:
+        client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
+        resp = await client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=600,
+            messages=[{"role": "user", "content":
+                f"Улучши это объявление о продаже автомобиля: исправь грамматику, "
+                f"сделай текст чётким и привлекательным для покупателя. "
+                f"Верни ТОЛЬКО улучшенный текст без объяснений.\n\n{text}"}],
+        )
+        improved = resp.content[0].text.strip()
+    except Exception as e:
+        logger.error(f"AI improve error: {e}")
+        return _cors(aio_web.Response(status=500, text="ai error"))
+
+    return _cors(aio_web.Response(
+        content_type="application/json",
+        text=json.dumps({"improved": improved}, ensure_ascii=False),
+    ))
+
+
 # ====== TELEGRAM MINI APP HANDLERS ======
 
 _WEBAPP_AWAIT_PHOTOS = "webapp_await_photos"
@@ -1586,19 +1675,22 @@ async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
     try:
         data = json.loads(raw)
     except Exception:
-        await update.message.reply_text("⚠️ Ошибка обработки данных. Попробуйте ещё раз.")
+        await update.message.reply_text("⚠️ Ошибка обработки данных.")
         return
 
     action = data.get("action")
+    kb = webapp_keyboard()
 
+    # ── ПОИСК ──
     if action == "search":
-        price_max = data.get("price_max")
-        results = await search_listings(
-            make=data.get("brand") or None,
-            price_max=int(price_max) if price_max else None,
-            city=data.get("city") or None,
-        )
-        # In-memory filters for fields not in search_listings
+        brands = data.get("brands") or ([data.get("brand")] if data.get("brand") else [])
+        results = await search_listings(city=data.get("city") or None)
+        if brands:
+            brands_lower = [b.lower() for b in brands]
+            results = [r for r in results if r.get("make", "").lower() in brands_lower]
+        if data.get("model"):
+            m = data["model"].lower()
+            results = [r for r in results if m in r.get("model", "").lower()]
         if data.get("fuel"):
             results = [r for r in results if r.get("fuel") == data["fuel"]]
         if data.get("transmission"):
@@ -1607,19 +1699,21 @@ async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
             results = [r for r in results if (r.get("year") or 0) >= int(data["year_from"])]
         if data.get("year_to"):
             results = [r for r in results if (r.get("year") or 9999) <= int(data["year_to"])]
+        if data.get("price_from"):
+            results = [r for r in results if (r.get("price") or 0) >= int(data["price_from"])]
+        if data.get("price_to"):
+            results = [r for r in results if (r.get("price") or 0) <= int(data["price_to"])]
 
         if not results:
             await update.message.reply_text(
-                "🔍 По вашим фильтрам объявлений не найдено.\n\n"
-                "Попробуйте расширить критерии поиска.",
-                reply_markup=main_menu_keyboard(),
+                "🔍 По вашим фильтрам ничего не найдено.\nПопробуйте расширить критерии.",
+                reply_markup=kb,
             )
             return
 
         total = len(results)
         await update.message.reply_text(
-            f"🔍 Найдено: <b>{total}</b> объявлений\n\n"
-            f"Показываю первые {min(5, total)}:",
+            f"🔍 Найдено: <b>{total}</b> объявлений\nПоказываю первые {min(5, total)}:",
             parse_mode="HTML",
         )
         for listing in results[:5]:
@@ -1627,21 +1721,17 @@ async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
             photos = json.loads(listing.get("photo_ids") or "[]")
             if photos:
                 await context.bot.send_photo(
-                    chat_id=update.effective_chat.id,
-                    photo=photos[0],
-                    caption=caption,
-                    parse_mode="HTML",
+                    chat_id=update.effective_chat.id, photo=photos[0],
+                    caption=caption, parse_mode="HTML",
                 )
             else:
                 await update.message.reply_text(caption, parse_mode="HTML")
         if total > 5:
-            await update.message.reply_text(
-                f"...и ещё {total - 5} объявлений. Уточните фильтры для лучших результатов.",
-                reply_markup=main_menu_keyboard(),
-            )
+            await update.message.reply_text(f"...и ещё {total - 5}. Уточните фильтры.", reply_markup=kb)
         else:
-            await update.message.reply_text("↩️ Главное меню:", reply_markup=main_menu_keyboard())
+            await update.message.reply_text("✅ Все результаты показаны.", reply_markup=kb)
 
+    # ── ПУБЛИКАЦИЯ ──
     elif action == "publish":
         context.user_data["webapp_listing"] = data
         context.user_data["webapp_photos"] = []
@@ -1661,8 +1751,56 @@ async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 InlineKeyboardButton("✅ Фото готовы", callback_data="webapp_photos_done"),
             ]]),
         )
+
+    # ── ДЕЙСТВИЯ С ОБЪЯВЛЕНИЕМ ──
+    elif action in ("hide", "unhide", "extend", "delete", "edit"):
+        listing_id = data.get("id")
+        if not listing_id:
+            await update.message.reply_text("⚠️ ID объявления не указан.")
+            return
+        listing = await get_listing(listing_id)
+        if not listing or listing.get("user_id") != update.effective_user.id:
+            await update.message.reply_text("⚠️ Объявление не найдено.", reply_markup=kb)
+            return
+
+        if action == "hide":
+            await hide_listing(listing_id)
+            for mid in json.loads(listing.get("channel_message_ids") or "[]"):
+                try:
+                    await context.bot.delete_message(chat_id=CHANNEL_ID, message_id=mid)
+                except Exception:
+                    pass
+            await update.message.reply_text("🙈 Объявление скрыто.", reply_markup=kb)
+
+        elif action == "unhide":
+            await unhide_listing(listing_id)
+            listing["status"] = "active"
+            msg_ids = await post_to_channel(context, listing)
+            await update_listing_channel_msgs(listing_id, msg_ids)
+            await update.message.reply_text("👁 Объявление снова опубликовано.", reply_markup=kb)
+
+        elif action == "extend":
+            await extend_listing(listing_id)
+            await update.message.reply_text("🔄 Объявление продлено на 30 дней.", reply_markup=kb)
+
+        elif action == "delete":
+            for mid in json.loads(listing.get("channel_message_ids") or "[]"):
+                try:
+                    await context.bot.delete_message(chat_id=CHANNEL_ID, message_id=mid)
+                except Exception:
+                    pass
+            await delete_listing(listing_id)
+            await update.message.reply_text("🗑 Объявление удалено.", reply_markup=kb)
+
+        elif action == "edit":
+            await update.message.reply_text(
+                f"✏️ Редактирование: {listing.get('make')} {listing.get('model')}\n"
+                "Используйте бота для редактирования — нажмите /start и выберите «Мои объявления».",
+                reply_markup=kb,
+            )
+
     else:
-        await update.message.reply_text("⚠️ Неизвестное действие.", reply_markup=main_menu_keyboard())
+        await update.message.reply_text("⚠️ Неизвестное действие.", reply_markup=kb)
 
 
 async def collect_webapp_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1767,6 +1905,10 @@ async def post_init(app: Application):
     web_app.router.add_get("/health", _healthcheck)
     web_app.router.add_get("/webapp", _serve_webapp)
     web_app.router.add_get("/webapp/", _serve_webapp)
+    web_app.router.add_get("/api/listings", _api_listings)
+    web_app.router.add_post("/api/ai_improve", _api_ai_improve)
+    web_app.router.add_route("OPTIONS", "/api/listings", _api_listings)
+    web_app.router.add_route("OPTIONS", "/api/ai_improve", _api_ai_improve)
     runner = aio_web.AppRunner(web_app)
     await runner.setup()
     await aio_web.TCPSite(runner, "0.0.0.0", port).start()

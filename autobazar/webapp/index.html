@@ -592,8 +592,15 @@ function pp1c(key,val,el){
 function aiImprove(){
   var txt=(gi('pi').value||'').trim();
   if(txt.length<10){tg.showAlert('Сначала напишите описание.');return;}
-  pv.description=txt;
-  tg.sendData(JSON.stringify({action:'ai_improve_desc',text:txt}));
+  var btn=document.querySelector('.btn-ai');
+  if(btn){btn.disabled=true;btn.textContent='⏳ Улучшаю...';}
+  fetch('/api/ai_improve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:txt})})
+    .then(function(r){return r.json();})
+    .then(function(d){
+      if(d.improved){gi('pi').value=d.improved;pv.description=d.improved;tg.showAlert('✅ Описание улучшено!');}
+    })
+    .catch(function(){tg.showAlert('Ошибка ИИ, попробуйте ещё раз.');})
+    .finally(function(){if(btn){btn.disabled=false;btn.textContent='✨ Улучшить с ИИ';}});
 }
 
 function updS(key,vid,label){
@@ -633,19 +640,26 @@ function doPublish(){
   tg.sendData(JSON.stringify({action:'publish',make:pv.make,model:pv.model,year:+pv.year,mileage:+pv.mileage,price:+pv.price,fuel:pv.fuel,transmission:pv.transmission,engine:pv.engine||null,turbo:pv.turbo,city:pv.city,description:pv.description,phone:pv.phone||null}));
 }
 
-var MOCK=[
-  {id:1,make:'Volkswagen',model:'Passat',year:2019,price:14500,mileage:87000,city:'Amsterdam',status:'active',days_left:22},
-  {id:2,make:'Toyota',model:'Camry',year:2018,price:17900,mileage:65000,city:'Rotterdam',status:'hidden',days_left:14},
-  {id:3,make:'BMW',model:'3 Series',year:2016,price:21000,mileage:110000,city:'Utrecht',status:'active',days_left:2}
-];
+function renderListingCard(l){
+  var sc=l.status==='hidden'?'status-hidden':l.days_left<=3?'status-expired':'status-active';
+  var st=l.status==='hidden'?'🙈 Скрыто':l.days_left<=3?'⏰ '+l.days_left+' дн.':'✅ '+l.days_left+' дн.';
+  return '<div class="listing-card"><div class="listing-card-header"><div class="listing-title">'+l.make+' '+l.model+' '+l.year+'</div><div class="listing-meta">📍 '+l.city+' · 🛣 '+Number(l.mileage).toLocaleString('ru')+' км</div><div class="listing-price">€'+Number(l.price).toLocaleString('ru')+'</div><span class="listing-status '+sc+'">'+st+'</span></div><div class="listing-actions"><button class="la-btn" onclick="act(\'edit\','+l.id+')">✏️ Изменить</button><button class="la-btn" onclick="act(\''+(l.status==='hidden'?'unhide':'hide')+'\','+l.id+')">'+(l.status==='hidden'?'👁 Показать':'🙈 Скрыть')+'</button><button class="la-btn" onclick="act(\'extend\','+l.id+')">🔄 Продлить</button><button class="la-btn red" onclick="act(\'delete\','+l.id+')">🗑 Удалить</button></div></div>';
+}
 function renderMyListings(){
   var el=gi('my-list');
-  if(!MOCK.length){el.innerHTML='<div class="empty"><div class="empty-ico">🚗</div><div class="empty-title">Нет объявлений</div><div class="empty-sub">Подайте первое объявление и оно появится здесь</div></div><button class="btn btn-primary" onclick="showTab(\'publish\')">📝 Подать объявление</button>';return;}
-  el.innerHTML=MOCK.map(function(l){
-    var sc=l.status==='hidden'?'status-hidden':l.days_left<=3?'status-expired':'status-active';
-    var st=l.status==='hidden'?'🙈 Скрыто':l.days_left<=3?'⏰ '+l.days_left+' дн.':'✅ '+l.days_left+' дн.';
-    return '<div class="listing-card"><div class="listing-card-header"><div class="listing-title">'+l.make+' '+l.model+' '+l.year+'</div><div class="listing-meta">📍 '+l.city+' · 🛣 '+Number(l.mileage).toLocaleString('ru')+' км</div><div class="listing-price">€'+Number(l.price).toLocaleString('ru')+'</div><span class="listing-status '+sc+'">'+st+'</span></div><div class="listing-actions"><button class="la-btn" onclick="act(\'edit\','+l.id+')">✏️ Изменить</button><button class="la-btn" onclick="act(\''+(l.status==='hidden'?'unhide':'hide')+'\','+l.id+')">'+(l.status==='hidden'?'👁 Показать':'🙈 Скрыть')+'</button><button class="la-btn" onclick="act(\'extend\','+l.id+')">🔄 Продлить</button><button class="la-btn red" onclick="act(\'delete\','+l.id+')">🗑 Удалить</button></div></div>';
-  }).join('');
+  el.innerHTML='<div style="text-align:center;padding:30px;color:var(--hint);">⏳ Загрузка…</div>';
+  var uid=(tg.initDataUnsafe&&tg.initDataUnsafe.user)?tg.initDataUnsafe.user.id:null;
+  if(!uid){
+    el.innerHTML='<div class="empty"><div class="empty-ico">👤</div><div class="empty-title">Откройте через бота</div><div class="empty-sub">Для просмотра объявлений откройте приложение через бота</div></div>';
+    return;
+  }
+  fetch('/api/listings?user_id='+uid)
+    .then(function(r){return r.json();})
+    .then(function(data){
+      if(!data.length){el.innerHTML='<div class="empty"><div class="empty-ico">🚗</div><div class="empty-title">Нет объявлений</div><div class="empty-sub">Подайте первое объявление и оно появится здесь</div></div><button class="btn btn-primary" onclick="showTab(\'publish\')">📝 Подать объявление</button>';return;}
+      el.innerHTML=data.map(renderListingCard).join('');
+    })
+    .catch(function(){el.innerHTML='<div class="empty"><div class="empty-ico">⚠️</div><div class="empty-title">Ошибка загрузки</div><div class="empty-sub">Попробуйте позже</div></div>';});
 }
 function act(a,id){tg.sendData(JSON.stringify({action:a,id:id}));}
 
