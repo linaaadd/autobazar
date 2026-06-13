@@ -439,7 +439,17 @@ async def go_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     context.user_data.clear()
-    await query.edit_message_text("🏠 Главное меню:", reply_markup=main_menu_keyboard())
+    name = query.from_user.first_name
+    await query.edit_message_text(
+        f"👋 Привет, {name}!\n\n"
+        "Добро пожаловать в <b>AutoBazar NL</b> — маркетплейс автомобилей.\n\n"
+        "Здесь вы можете:\n"
+        "• 📝 Подать объявление о продаже\n"
+        "• 🔍 Найти нужный автомобиль\n"
+        "• 📋 Управлять своими объявлениями",
+        parse_mode="HTML",
+        reply_markup=main_menu_keyboard(),
+    )
 
 
 # ====== ПОДАЧА ОБЪЯВЛЕНИЯ ======
