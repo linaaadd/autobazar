@@ -61,7 +61,7 @@ if _missing:
 SEARCH_MAKE, SEARCH_MODEL, SEARCH_PRICE_MAX = range(20, 23)
 
 # ====== СОСТОЯНИЯ ДИАЛОГА: редактирование ======
-EDIT_CHOOSE_FIELD, EDIT_PRICE, EDIT_DESCRIPTION = range(30, 33)
+EDIT_CHOOSE_FIELD, EDIT_PRICE, EDIT_DESCRIPTION, EDIT_AI_CONFIRM = range(30, 34)
 
 FUEL_TYPES = ["Бензин", "Дизель", "Электро", "Газ/Бензин"]
 TRANSMISSION_TYPES = ["Автомат", "Механика"]
@@ -266,13 +266,13 @@ def _add_watermark(img_bytes: bytes) -> bytes:
     draw = ImageDraw.Draw(overlay)
 
     text = "@autobazar_nederland"
-    font_size = max(20, w // 25)
+    font_size = max(14, w // 40)
     font = None
     for fp in [
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-        "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/TTF/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
     ]:
         try:
             font = ImageFont.truetype(fp, font_size)
@@ -287,10 +287,12 @@ def _add_watermark(img_bytes: bytes) -> bytes:
 
     bbox = draw.textbbox((0, 0), text, font=font)
     tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-    margin, pad = 12, 6
-    x, y = w - tw - margin, h - th - margin
-    draw.rectangle([x - pad, y - pad, x + tw + pad, y + th + pad], fill=(0, 0, 0, 160))
-    draw.text((x, y), text, fill=(255, 255, 255, 240), font=font)
+    x, y = 14, h - th - 14
+
+    # Subtle dark outline instead of a box
+    for dx, dy in [(-1, -1), (1, -1), (-1, 1), (1, 1), (0, -1), (0, 1), (-1, 0), (1, 0)]:
+        draw.text((x + dx, y + dy), text, fill=(0, 0, 0, 110), font=font)
+    draw.text((x, y), text, fill=(255, 255, 255, 190), font=font)
 
     result = Image.alpha_composite(img, overlay).convert("RGB")
     out = io.BytesIO()
@@ -1341,12 +1343,23 @@ async def edit_price_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     return ConversationHandler.END
 
 
+def _edit_ai_keyboard(ai_done: bool = False) -> InlineKeyboardMarkup:
+    rows = []
+    if not ai_done:
+        rows.append([InlineKeyboardButton("✨ Улучшить описание AI", callback_data="edit_ai_improve")])
+    else:
+        rows.append([InlineKeyboardButton("↩️ Вернуть оригинал", callback_data="edit_ai_revert")])
+    rows.append([InlineKeyboardButton("✅ Готово", callback_data="edit_done")])
+    return InlineKeyboardMarkup(rows)
+
+
 async def edit_description_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
     if len(text) < 20:
         await update.message.reply_text("⚠️ Описание слишком короткое (минимум 20 символов).")
         return EDIT_DESCRIPTION
     listing_id = context.user_data.get("editing_listing_id")
+    context.user_data["edit_original_desc"] = text
     await update_listing_field(listing_id, "description", text)
     listing = await get_listing(listing_id)
     old_ids = json.loads(listing.get("channel_message_ids") or "[]")
@@ -1354,7 +1367,85 @@ async def edit_description_handler(update: Update, context: ContextTypes.DEFAULT
     msg_ids = await post_to_channel(context, listing)
     await update_listing_channel_msgs(listing_id, msg_ids)
     await update.message.reply_text(
-        "✅ Описание обновлено. Объявление переопубликовано.",
+        "✅ Описание сохранено и объявление переопубликовано.\n\n"
+        f"📝 <i>{text}</i>",
+        parse_mode="HTML",
+        reply_markup=_edit_ai_keyboard(ai_done=False),
+    )
+    return EDIT_AI_CONFIRM
+
+
+async def edit_ai_improve(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer("✨ Улучшаю...")
+    await query.edit_message_text("⏳ Генерирую улучшенное описание...")
+    listing_id = context.user_data.get("editing_listing_id")
+    listing = await get_listing(listing_id)
+    try:
+        client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
+        response = await client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=400,
+            messages=[{"role": "user", "content": (
+                f"Напиши продающее описание для объявления о продаже автомобиля на русском языке.\n\n"
+                f"Авто: {listing['make']} {listing['model']} {listing['year']} г.\n"
+                f"Пробег: {listing['mileage']:,} км\n"
+                f"Топливо: {listing['fuel']}\n"
+                f"КПП: {listing['transmission']}\n"
+                f"Город: {listing['city']}\n"
+                f"Исходное описание: {listing['description']}\n\n"
+                "Напиши только текст описания (2–4 предложения). Без заголовков, без цены, без контактов."
+            )}],
+        )
+        improved = response.content[0].text.strip()
+    except Exception as e:
+        logger.error(f"AI edit error: {e}")
+        await query.edit_message_text(
+            "⚠️ Не удалось улучшить описание. Попробуйте позже.",
+            reply_markup=_edit_ai_keyboard(ai_done=False),
+        )
+        return EDIT_AI_CONFIRM
+    await update_listing_field(listing_id, "description", improved)
+    listing = await get_listing(listing_id)
+    old_ids = json.loads(listing.get("channel_message_ids") or "[]")
+    await delete_from_channel(context, old_ids)
+    msg_ids = await post_to_channel(context, listing)
+    await update_listing_channel_msgs(listing_id, msg_ids)
+    await query.edit_message_text(
+        "✨ <b>AI улучшило описание:</b>\n\n"
+        f"📝 <i>{improved}</i>\n\n"
+        "Объявление переопубликовано.",
+        parse_mode="HTML",
+        reply_markup=_edit_ai_keyboard(ai_done=True),
+    )
+    return EDIT_AI_CONFIRM
+
+
+async def edit_ai_revert(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    listing_id = context.user_data.get("editing_listing_id")
+    original = context.user_data.get("edit_original_desc", "")
+    await update_listing_field(listing_id, "description", original)
+    listing = await get_listing(listing_id)
+    old_ids = json.loads(listing.get("channel_message_ids") or "[]")
+    await delete_from_channel(context, old_ids)
+    msg_ids = await post_to_channel(context, listing)
+    await update_listing_channel_msgs(listing_id, msg_ids)
+    await query.edit_message_text(
+        "↩️ Описание возвращено к оригиналу.\n\n"
+        f"📝 <i>{original}</i>",
+        parse_mode="HTML",
+        reply_markup=_edit_ai_keyboard(ai_done=False),
+    )
+    return EDIT_AI_CONFIRM
+
+
+async def edit_ai_done(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text(
+        "✅ Готово.",
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📋 Мои объявления", callback_data="my_listings")]]),
     )
     return ConversationHandler.END
@@ -1535,6 +1626,11 @@ def main():
             EDIT_CHOOSE_FIELD: [CallbackQueryHandler(edit_choose_field, pattern="^editf_")],
             EDIT_PRICE:        [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_price_handler)],
             EDIT_DESCRIPTION:  [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_description_handler)],
+            EDIT_AI_CONFIRM: [
+                CallbackQueryHandler(edit_ai_improve, pattern="^edit_ai_improve$"),
+                CallbackQueryHandler(edit_ai_revert, pattern="^edit_ai_revert$"),
+                CallbackQueryHandler(edit_ai_done, pattern="^edit_done$"),
+            ],
         },
         fallbacks=[CommandHandler("cancel", edit_cancel)],
         per_message=False,
