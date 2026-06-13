@@ -931,6 +931,39 @@ async def cancel_listing(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ====== МОИ ОБЪЯВЛЕНИЯ ======
 
+def _build_listings_view(items: list) -> tuple[str, InlineKeyboardMarkup]:
+    if not items:
+        return "📋 У вас нет объявлений.", InlineKeyboardMarkup([
+            [InlineKeyboardButton("🚗 Разместить объявление", callback_data="new_listing")],
+            [InlineKeyboardButton("🏠 Меню", callback_data="main_menu")],
+        ])
+    now = datetime.now()
+    text = "📋 <b>Ваши объявления:</b>\n\n"
+    keyboard = []
+    for item in items:
+        expires = datetime.fromisoformat(item["expires_at"])
+        days_left = (expires - now).days
+        if item["status"] == "hidden":
+            icon, status_str = "🙈", "скрыто"
+        elif days_left >= 0:
+            icon, status_str = "✅", f"ещё {days_left} дн."
+        else:
+            icon, status_str = "⏰", "истекло"
+        text += f"{icon} <b>#{item['id']}</b> — {item['make']} {item['model']} {item['year']} — {item['price']:,} EUR ({status_str})\n"
+        hide_btn = (
+            InlineKeyboardButton(f"👁 Показать #{item['id']}", callback_data=f"unhide_{item['id']}")
+            if item["status"] == "hidden"
+            else InlineKeyboardButton(f"🙈 Скрыть #{item['id']}", callback_data=f"hide_{item['id']}")
+        )
+        keyboard.append([InlineKeyboardButton(f"✏️ Изменить #{item['id']}", callback_data=f"edit_{item['id']}"), hide_btn])
+        keyboard.append([
+            InlineKeyboardButton(f"🔄 Продлить #{item['id']}", callback_data=f"extend_{item['id']}"),
+            InlineKeyboardButton(f"🗑 #{item['id']}", callback_data=f"del_{item['id']}"),
+        ])
+    keyboard.append([InlineKeyboardButton("🏠 Меню", callback_data="main_menu")])
+    return text, InlineKeyboardMarkup(keyboard)
+
+
 async def my_listings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.callback_query:
         await update.callback_query.answer()
@@ -939,52 +972,9 @@ async def my_listings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         user_id = update.effective_user.id
         reply = update.message.reply_text
-
     items = await get_user_listings(user_id)
-
-    if not items:
-        await reply(
-            "📋 У вас нет объявлений.",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🚗 Разместить объявление", callback_data="new_listing")],
-                [InlineKeyboardButton("🏠 Меню", callback_data="main_menu")],
-            ]),
-        )
-        return
-
-    now = datetime.now()
-    text = "📋 <b>Ваши объявления:</b>\n\n"
-    keyboard = []
-
-    for item in items:
-        expires = datetime.fromisoformat(item["expires_at"])
-        days_left = (expires - now).days
-        if item["status"] == "hidden":
-            icon = "🙈"
-            status_str = "скрыто"
-        elif days_left >= 0:
-            icon = "✅"
-            status_str = f"ещё {days_left} дн."
-        else:
-            icon = "⏰"
-            status_str = "истекло"
-        text += f"{icon} <b>#{item['id']}</b> — {item['make']} {item['model']} {item['year']} — {item['price']:,} EUR ({status_str})\n"
-        hide_btn = (
-            InlineKeyboardButton(f"👁 Показать #{item['id']}", callback_data=f"unhide_{item['id']}")
-            if item["status"] == "hidden"
-            else InlineKeyboardButton(f"🙈 Скрыть #{item['id']}", callback_data=f"hide_{item['id']}")
-        )
-        keyboard.append([
-            InlineKeyboardButton(f"✏️ Изменить #{item['id']}", callback_data=f"edit_{item['id']}"),
-            hide_btn,
-        ])
-        keyboard.append([
-            InlineKeyboardButton(f"🔄 Продлить #{item['id']}", callback_data=f"extend_{item['id']}"),
-            InlineKeyboardButton(f"🗑 #{item['id']}", callback_data=f"del_{item['id']}"),
-        ])
-
-    keyboard.append([InlineKeyboardButton("🏠 Меню", callback_data="main_menu")])
-    await reply(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard))
+    text, markup = _build_listings_view(items)
+    await reply(text, parse_mode="HTML", reply_markup=markup)
 
 
 async def extend_listing_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1460,7 +1450,6 @@ async def edit_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def hide_listing_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
     listing_id = int(query.data.split("_")[1])
     listing = await get_listing(listing_id)
     if not listing or listing["user_id"] != query.from_user.id:
@@ -1471,12 +1460,13 @@ async def hide_listing_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     await update_listing_channel_msgs(listing_id, [])
     await hide_listing(listing_id)
     await query.answer(f"🙈 Объявление #{listing_id} скрыто из канала", show_alert=True)
-    await my_listings(update, context)
+    items = await get_user_listings(query.from_user.id)
+    text, markup = _build_listings_view(items)
+    await query.edit_message_text(text, parse_mode="HTML", reply_markup=markup)
 
 
 async def unhide_listing_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
     listing_id = int(query.data.split("_")[1])
     listing = await get_listing(listing_id)
     if not listing or listing["user_id"] != query.from_user.id:
@@ -1487,7 +1477,9 @@ async def unhide_listing_handler(update: Update, context: ContextTypes.DEFAULT_T
     msg_ids = await post_to_channel(context, listing)
     await update_listing_channel_msgs(listing_id, msg_ids)
     await query.answer(f"👁 Объявление #{listing_id} снова опубликовано", show_alert=True)
-    await my_listings(update, context)
+    items = await get_user_listings(query.from_user.id)
+    text, markup = _build_listings_view(items)
+    await query.edit_message_text(text, parse_mode="HTML", reply_markup=markup)
 
 
 # ====== ФОНОВЫЕ ЗАДАЧИ ======
