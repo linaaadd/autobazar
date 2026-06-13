@@ -217,9 +217,10 @@ async def _validate_car(make: str, model: str) -> bool:
             model="claude-haiku-4-5-20251001",
             max_tokens=5,
             messages=[{"role": "user", "content":
-                f"Does a car brand '{make}' with model '{model}' exist as a real car? "
-                f"The model name may be written in Russian, transliterated, or abbreviated — treat it as the phonetic equivalent. "
-                f"For example 'Пассат' = 'Passat', 'Камри' = 'Camry', 'Гольф' = 'Golf'. Answer only YES or NO."}],
+                f"Is '{model}' a plausible car model name for brand '{make}'? "
+                f"The name may be in Russian, transliterated, abbreviated, or contain typos — be lenient. "
+                f"Answer NO only if it is obviously not a car model (e.g. a random word, food, animal). "
+                f"If unsure, answer YES. Answer only YES or NO."}],
         )
         return resp.content[0].text.strip().upper().startswith("Y")
     except Exception:
