@@ -46,15 +46,34 @@ if _missing:
 # ====== СОСТОЯНИЯ ДИАЛОГА: подача объявления ======
 (
     ASK_MAKE, ASK_MODEL, ASK_YEAR, ASK_MILEAGE, ASK_PRICE,
-    ASK_FUEL, ASK_TRANSMISSION, ASK_ENGINE, ASK_CITY, ASK_PHONE,
+    ASK_FUEL, ASK_TRANSMISSION, ASK_ENGINE, ASK_TURBO, ASK_CITY, ASK_PHONE,
     ASK_DESCRIPTION, ASK_PHOTOS, CONFIRM,
-) = range(13)
+) = range(14)
 
 # ====== СОСТОЯНИЯ ДИАЛОГА: поиск ======
 SEARCH_MAKE, SEARCH_MODEL, SEARCH_PRICE_MAX = range(20, 23)
 
 FUEL_TYPES = ["Бензин", "Дизель", "Гибрид", "Электро", "Газ/Бензин"]
-TRANSMISSION_TYPES = ["Автомат", "Механика", "Робот", "Вариатор"]
+TRANSMISSION_TYPES = ["Автомат", "Механика"]
+
+TURBO_LABELS = {
+    "Toyota":      {"Бензин": "Turbo",          "Дизель": "D-4D Turbo",    "Газ/Бензин": "Turbo"},
+    "BMW":         {"Бензин": "TwinPower Turbo", "Дизель": "TwinPower Turbo","Газ/Бензин": "TwinPower Turbo"},
+    "Mercedes":    {"Бензин": "AMG Turbo",       "Дизель": "CDI",           "Газ/Бензин": "AMG Turbo"},
+    "Volkswagen":  {"Бензин": "TSI",             "Дизель": "TDI",           "Газ/Бензин": "TSI"},
+    "Audi":        {"Бензин": "TFSI",            "Дизель": "TDI",           "Газ/Бензин": "TFSI"},
+    "Ford":        {"Бензин": "EcoBoost",        "Дизель": "EcoBlue",       "Газ/Бензин": "EcoBoost"},
+    "Škoda":       {"Бензин": "TSI",             "Дизель": "TDI",           "Газ/Бензин": "TSI"},
+    "Opel":        {"Бензин": "Turbo",           "Дизель": "CDTI",          "Газ/Бензин": "Turbo"},
+    "Hyundai":     {"Бензин": "T-GDi",           "Дизель": "CRDi",          "Газ/Бензин": "T-GDi"},
+    "Kia":         {"Бензин": "T-GDi",           "Дизель": "CRDi",          "Газ/Бензин": "T-GDi"},
+    "Volvo":       {"Бензин": "T-series",        "Дизель": "D-series",      "Газ/Бензин": "T-series"},
+    "Renault":     {"Бензин": "TCe",             "Дизель": "dCi",           "Газ/Бензин": "TCe"},
+    "Peugeot":     {"Бензин": "THP",             "Дизель": "HDi",           "Газ/Бензин": "THP"},
+    "Honda":       {"Бензин": "VTEC Turbo",      "Дизель": "i-DTEC",        "Газ/Бензин": "VTEC Turbo"},
+    "Nissan":      {"Бензин": "DIG-T",           "Дизель": "dCi",           "Газ/Бензин": "DIG-T"},
+    "Mazda":       {"Бензин": "Skyactiv-T",      "Дизель": "Skyactiv-D",    "Газ/Бензин": "Skyactiv-T"},
+}
 
 POPULAR_MAKES = [
     "Toyota", "BMW", "Mercedes", "Volkswagen",
@@ -155,7 +174,7 @@ def search_price_keyboard() -> InlineKeyboardMarkup:
 
 def main_menu_keyboard():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("📝 Подать объявление", callback_data="new_listing")],
+        [InlineKeyboardButton("🚗 Разместить объявление", callback_data="new_listing")],
         [
             InlineKeyboardButton("🔍 Поиск авто", callback_data="search"),
             InlineKeyboardButton("📋 Мои объявления", callback_data="my_listings"),
@@ -170,14 +189,58 @@ def fuel_keyboard():
 
 
 def transmission_keyboard():
-    return InlineKeyboardMarkup(
-        [[InlineKeyboardButton(t, callback_data=f"tr_{t}")] for t in TRANSMISSION_TYPES]
-    )
+    rows = [[InlineKeyboardButton(t, callback_data=f"tr_{t}")] for t in TRANSMISSION_TYPES]
+    rows.append([InlineKeyboardButton("✏️ Другая", callback_data="tr_other")])
+    return InlineKeyboardMarkup(rows)
+
+
+def turbo_keyboard(make: str, fuel: str) -> InlineKeyboardMarkup:
+    turbo_label = TURBO_LABELS.get(make, {}).get(fuel, "Turbo")
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(f"⚡ Турбо ({turbo_label})", callback_data=f"turbo_{turbo_label}")],
+        [InlineKeyboardButton("🌀 Атмосферный", callback_data="turbo_no")],
+    ])
 
 
 def photos_keyboard(count: int):
     label = f"✅ Готово ({count} фото)" if count else "✅ Фото готовы"
     return InlineKeyboardMarkup([[InlineKeyboardButton(label, callback_data="photos_done")]])
+
+
+# ====== ВАЛИДАЦИЯ ======
+
+async def _validate_car(make: str, model: str) -> bool:
+    try:
+        client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
+        resp = await client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=5,
+            messages=[{"role": "user", "content":
+                f"Does a car brand '{make}' with model '{model}' exist as a real car? Answer only YES or NO."}],
+        )
+        return resp.content[0].text.strip().upper().startswith("Y")
+    except Exception:
+        return True
+
+
+async def _validate_photo_is_car(bot, file_id: str) -> bool:
+    import base64
+    try:
+        tg_file = await bot.get_file(file_id)
+        img_bytes = bytes(await tg_file.download_as_bytearray())
+        img_b64 = base64.b64encode(img_bytes).decode()
+        client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
+        resp = await client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=5,
+            messages=[{"role": "user", "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": img_b64}},
+                {"type": "text", "text": "Is a car (automobile) visible in this image? Answer only YES or NO."},
+            ]}],
+        )
+        return resp.content[0].text.strip().upper().startswith("Y")
+    except Exception:
+        return True
 
 
 # ====== ФОРМАТИРОВАНИЕ ОБЪЯВЛЕНИЯ ======
@@ -189,7 +252,12 @@ def _contact(listing: dict) -> str:
 
 
 def listing_caption(listing: dict) -> str:
-    engine = f"  |  🔧 {listing['engine']}" if listing.get("engine") else ""
+    engine_parts = []
+    if listing.get("engine"):
+        engine_parts.append(listing["engine"])
+    if listing.get("turbo") and listing["turbo"] != "Атмосферный":
+        engine_parts.append(listing["turbo"])
+    engine = ("  |  🔧 " + " ".join(engine_parts)) if engine_parts else ""
     return (
         f"🚗 <b>{listing['make']} {listing['model']} {listing['year']}</b>\n"
         f"💶 <b>{listing['price']:,} {listing['currency']}</b>\n\n"
@@ -210,7 +278,9 @@ def listing_preview(d: dict, photo_count: int, ai_improved: bool = False) -> str
         f"💶 {d['price']:,} EUR\n"
         f"📍 {d['city']}\n"
         f"🛣 {d['mileage']:,} км\n"
-        f"⛽ {d['fuel']}  |  ⚙️ {d['transmission']}{f'  |  🔧 ' + d['engine'] if d.get('engine') else ''}\n"
+        f"⛽ {d['fuel']}  |  ⚙️ {d['transmission']}"
+        + (f"  |  🔧 {d.get('engine', '')} {d.get('turbo', '')}".rstrip() if d.get('engine') else "")
+        + "\n"
         f"📸 Фото: {photo_count}\n\n"
         f"📞 Контакт: {contact}\n\n"
         f"📝 {d['description']}"
@@ -336,13 +406,23 @@ async def ask_model(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # === ИЗМЕНЕНО: ask_year ===
 async def ask_year(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["model"] = update.message.text.strip()
-    await update.message.reply_text(
-        f"✅ Модель: <b>{context.user_data['model']}</b>\n\n"
-        "Шаг 3 из 10 — Год выпуска",
+    model = update.message.text.strip()
+    make = context.user_data.get("make", "")
+    msg = await update.message.reply_text("⏳ Проверяю марку и модель...")
+    valid = await _validate_car(make, model)
+    if not valid:
+        await msg.edit_text(
+            f"⚠️ Не могу найти автомобиль <b>{make} {model}</b>.\n"
+            "Проверьте написание и попробуйте снова.",
+            parse_mode="HTML",
+        )
+        return ASK_MODEL
+    await msg.edit_text(
+        f"✅ Модель: <b>{model}</b>\n\nШаг 3 из 13 — Год выпуска",
         parse_mode="HTML",
         reply_markup=year_keyboard(),
     )
+    context.user_data["model"] = model
     return ASK_YEAR
 
 
@@ -426,10 +506,40 @@ async def ask_transmission(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def ask_engine(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    if query.data == "tr_other":
+        await query.message.reply_text("✏️ Введите тип коробки передач:")
+        return ASK_TRANSMISSION
     context.user_data["transmission"] = query.data.replace("tr_", "")
+    if context.user_data.get("fuel") == "Электро":
+        context.user_data["engine"] = ""
+        context.user_data["turbo"] = ""
+        await query.edit_message_text(
+            f"✅ КПП: <b>{context.user_data['transmission']}</b>\n\nШаг 9 из 13 — Город",
+            parse_mode="HTML",
+            reply_markup=city_keyboard(),
+        )
+        return ASK_CITY
     await query.edit_message_text(
-        f"✅ КПП: <b>{context.user_data['transmission']}</b>\n\n"
-        "Шаг 8 из 12 — Объём двигателя",
+        f"✅ КПП: <b>{context.user_data['transmission']}</b>\n\nШаг 8 из 13 — Объём двигателя",
+        parse_mode="HTML",
+        reply_markup=engine_keyboard(),
+    )
+    return ASK_ENGINE
+
+
+async def ask_engine_from_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["transmission"] = update.message.text.strip()
+    if context.user_data.get("fuel") == "Электро":
+        context.user_data["engine"] = ""
+        context.user_data["turbo"] = ""
+        await update.message.reply_text(
+            f"✅ КПП: <b>{context.user_data['transmission']}</b>\n\nШаг 9 из 13 — Город",
+            parse_mode="HTML",
+            reply_markup=city_keyboard(),
+        )
+        return ASK_CITY
+    await update.message.reply_text(
+        f"✅ КПП: <b>{context.user_data['transmission']}</b>\n\nШаг 8 из 13 — Объём двигателя",
         parse_mode="HTML",
         reply_markup=engine_keyboard(),
     )
@@ -444,21 +554,38 @@ async def got_engine_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ASK_ENGINE
     engine = query.data.replace("eng_", "") + "L"
     context.user_data["engine"] = engine
+    make = context.user_data.get("make", "")
+    fuel = context.user_data.get("fuel", "")
     await query.message.reply_text(
-        f"✅ Двигатель: <b>{engine}</b>\n\n"
-        "Шаг 9 из 12 — Город",
+        f"✅ Двигатель: <b>{engine}</b>\n\nШаг 9 из 13 — Тип двигателя",
         parse_mode="HTML",
-        reply_markup=city_keyboard(),
+        reply_markup=turbo_keyboard(make, fuel),
     )
-    return ASK_CITY
+    return ASK_TURBO
 
 
 async def ask_engine_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
     context.user_data["engine"] = text
+    make = context.user_data.get("make", "")
+    fuel = context.user_data.get("fuel", "")
     await update.message.reply_text(
-        f"✅ Двигатель: <b>{text}</b>\n\n"
-        "Шаг 9 из 12 — Город",
+        f"✅ Двигатель: <b>{text}</b>\n\nШаг 9 из 13 — Тип двигателя",
+        parse_mode="HTML",
+        reply_markup=turbo_keyboard(make, fuel),
+    )
+    return ASK_TURBO
+
+
+async def got_turbo_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    if query.data == "turbo_no":
+        context.user_data["turbo"] = "Атмосферный"
+    else:
+        context.user_data["turbo"] = query.data.replace("turbo_", "")
+    await query.message.reply_text(
+        f"✅ Тип: <b>{context.user_data['turbo']}</b>\n\nШаг 10 из 13 — Город",
         parse_mode="HTML",
         reply_markup=city_keyboard(),
     )
@@ -558,7 +685,15 @@ async def collect_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=photos_keyboard(len(photos)),
         )
         return ASK_PHOTOS
-    photos.append(update.message.photo[-1].file_id)
+    file_id = update.message.photo[-1].file_id
+    is_car = await _validate_photo_is_car(context.bot, file_id)
+    if not is_car:
+        await update.message.reply_text(
+            "⚠️ На фото не видно автомобиля. Пожалуйста, загрузите фото вашего авто.",
+            reply_markup=photos_keyboard(len(photos)),
+        )
+        return ASK_PHOTOS
+    photos.append(file_id)
     if update.message.media_group_id:
         # Debounce: cancel pending ack, schedule one reply for the whole group
         for job in context.job_queue.get_jobs_by_name(f"photo_ack_{update.effective_user.id}"):
@@ -667,6 +802,7 @@ async def publish_listing(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "fuel": d["fuel"],
         "transmission": d["transmission"],
         "engine": d.get("engine", ""),
+        "turbo": d.get("turbo", ""),
         "city": d["city"],
         "description": d["description"],
         "photo_ids": d["photos"],
@@ -717,7 +853,7 @@ async def my_listings(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await reply(
             "📋 У вас нет объявлений.",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("📝 Подать объявление", callback_data="new_listing")],
+                [InlineKeyboardButton("🚗 Разместить объявление", callback_data="new_listing")],
                 [InlineKeyboardButton("🏠 Меню", callback_data="main_menu")],
             ]),
         )
@@ -1086,10 +1222,16 @@ def main():
             ASK_MILEAGE:      [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_price)],
             ASK_PRICE:        [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_fuel)],
             ASK_FUEL:         [CallbackQueryHandler(ask_transmission, pattern="^fuel_")],
-            ASK_TRANSMISSION: [CallbackQueryHandler(ask_engine, pattern="^tr_")],
+            ASK_TRANSMISSION: [
+                CallbackQueryHandler(ask_engine, pattern="^tr_"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, ask_engine_from_text),
+            ],
             ASK_ENGINE: [
                 CallbackQueryHandler(got_engine_button, pattern="^eng_"),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, ask_engine_text),
+            ],
+            ASK_TURBO: [
+                CallbackQueryHandler(got_turbo_button, pattern="^turbo_"),
             ],
             ASK_CITY: [
                 CallbackQueryHandler(got_city_button, pattern="^city_"),
