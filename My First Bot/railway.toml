@@ -5,5 +5,3 @@ builder = "nixpacks"
 startCommand = "python bot.py"
 healthcheckPath = "/health"
 healthcheckTimeout = 30
-healthcheckPath = "/health"
-healthcheckTimeout = 30
