@@ -8,7 +8,7 @@ from urllib.parse import quote
 
 import anthropic
 from dotenv import load_dotenv
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputFile, InputMediaPhoto, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, Update
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -389,7 +389,7 @@ async def post_to_channel(context, listing: dict) -> list[int]:
         if len(watermarked) == 1:
             msg = await context.bot.send_photo(
                 chat_id=CHANNEL_ID,
-                photo=InputFile(io.BytesIO(watermarked[0]), filename="photo.jpg"),
+                photo=io.BytesIO(watermarked[0]),
                 caption=caption,
                 parse_mode="HTML",
             )
@@ -397,7 +397,7 @@ async def post_to_channel(context, listing: dict) -> list[int]:
         else:
             media = [
                 InputMediaPhoto(
-                    media=InputFile(io.BytesIO(wm), filename=f"photo_{i}.jpg"),
+                    media=io.BytesIO(wm),
                     caption=caption if i == 0 else None,
                     parse_mode="HTML" if i == 0 else None,
                 )
