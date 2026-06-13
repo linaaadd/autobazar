@@ -906,8 +906,9 @@ async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
             caption = listing_caption(listing)
             photos = json.loads(listing.get("photo_ids") or "[]")
             if photos:
+                wm = await _watermark_photo(context.bot, photos[0])
                 await context.bot.send_photo(
-                    chat_id=update.effective_chat.id, photo=photos[0],
+                    chat_id=update.effective_chat.id, photo=io.BytesIO(wm),
                     caption=caption, parse_mode="HTML",
                 )
             else:
