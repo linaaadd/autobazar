@@ -1002,6 +1002,7 @@ async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
             msg, parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("✅ Фото готовы", callback_data="webapp_photos_done"),
+                InlineKeyboardButton("❌ Отмена", callback_data="webapp_photos_cancel"),
             ]]),
         )
 
@@ -1017,12 +1018,16 @@ async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
             return
 
         if action == "hide":
-            await hide_listing(listing_id)
-            for mid in json.loads(listing.get("channel_message_ids") or "[]"):
+            msg_ids = json.loads(listing.get("channel_message_ids") or "[]")
+            logger.info(f"Hide #{listing_id}, channel_message_ids={msg_ids}")
+            for mid in msg_ids:
                 try:
                     await context.bot.delete_message(chat_id=CHANNEL_ID, message_id=mid)
-                except Exception:
-                    pass
+                    logger.info(f"Deleted message {mid} from channel")
+                except Exception as e:
+                    logger.error(f"Failed to delete message {mid}: {e}")
+            await hide_listing(listing_id)
+            await update_listing_channel_msgs(listing_id, [])
             await update.message.reply_text("🙈 Объявление скрыто.", reply_markup=kb)
 
         elif action == "unhide":
@@ -1031,8 +1036,10 @@ async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
             listing["status"] = "active"
             async def _republish():
                 try:
-                    msg_ids = await post_to_channel(context, listing)
+                    msg_ids, wm_ids = await post_to_channel(context, listing)
                     await update_listing_channel_msgs(listing_id, msg_ids)
+                    if wm_ids:
+                        await update_listing_watermarked_photos(listing_id, wm_ids)
                     await context.bot.send_message(update.effective_chat.id, "👁 Объявление опубликовано в канал.")
                 except Exception as e:
                     logger.error(f"republish error: {e}")
@@ -1238,6 +1245,16 @@ async def webapp_photos_done(update: Update, context: ContextTypes.DEFAULT_TYPE)
         )
 
 
+async def webapp_photos_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    context.user_data[_WEBAPP_AWAIT_PHOTOS] = False
+    context.user_data.pop("webapp_photos", None)
+    context.user_data.pop("webapp_photo_listing_id", None)
+    context.user_data.pop("webapp_photo_mode", None)
+    await query.edit_message_text("❌ Отменено.", reply_markup=None)
+
+
 # ====== ЗАПУСК ======
 
 async def post_init(app: Application):
@@ -1309,6 +1326,7 @@ def main():
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_webapp_data))
     app.add_handler(MessageHandler(filters.PHOTO, collect_webapp_photo))
     app.add_handler(CallbackQueryHandler(webapp_photos_done, pattern="^webapp_photos_done$"))
+    app.add_handler(CallbackQueryHandler(webapp_photos_cancel, pattern="^webapp_photos_cancel$"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, ai_fallback))
 
     logger.info("✅ AutoBazar Bot запущен!")
