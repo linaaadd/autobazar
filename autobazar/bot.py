@@ -1790,10 +1790,16 @@ async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
         elif action == "unhide":
             await unhide_listing(listing_id)
+            await update.message.reply_text("⏳ Публикую в канал…", reply_markup=kb)
             listing["status"] = "active"
-            msg_ids = await post_to_channel(context, listing)
-            await update_listing_channel_msgs(listing_id, msg_ids)
-            await update.message.reply_text("👁 Объявление снова опубликовано.", reply_markup=kb)
+            async def _republish():
+                try:
+                    msg_ids = await post_to_channel(context, listing)
+                    await update_listing_channel_msgs(listing_id, msg_ids)
+                    await context.bot.send_message(update.effective_chat.id, "👁 Объявление опубликовано в канал.")
+                except Exception as e:
+                    logger.error(f"republish error: {e}")
+            asyncio.create_task(_republish())
 
         elif action == "extend":
             await extend_listing(listing_id)
@@ -1809,11 +1815,21 @@ async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await update.message.reply_text("🗑 Объявление удалено.", reply_markup=kb)
 
         elif action == "edit":
-            await update.message.reply_text(
-                f"✏️ Редактирование: {listing.get('make')} {listing.get('model')}\n"
-                "Используйте бота для редактирования — нажмите /start и выберите «Мои объявления».",
-                reply_markup=kb,
-            )
+            pass  # handled in webapp inline edit panel
+
+    elif action == "edit_save":
+        listing_id = data.get("id")
+        listing = await get_listing(listing_id) if listing_id else None
+        if not listing or listing.get("user_id") != update.effective_user.id:
+            await update.message.reply_text("⚠️ Объявление не найдено.", reply_markup=kb)
+            return
+        new_price = data.get("price")
+        new_desc = data.get("description")
+        if new_price:
+            await update_listing_field(listing_id, "price", int(new_price))
+        if new_desc:
+            await update_listing_field(listing_id, "description", new_desc)
+        await update.message.reply_text("✅ Объявление обновлено.", reply_markup=kb)
 
     else:
         await update.message.reply_text("⚠️ Неизвестное действие.", reply_markup=kb)
