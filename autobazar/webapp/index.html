@@ -683,7 +683,7 @@ function renderListingCard(l){
   var sc=l.status==='hidden'?'status-hidden':l.days_left<=3?'status-expired':'status-active';
   var st=l.status==='hidden'?'🙈 Скрыто':l.days_left<=3?'⏰ '+l.days_left+' дн.':'✅ '+l.days_left+' дн.';
   var pc=l.photo_count||0;
-  var photoRow='<div style="border-top:.5px solid var(--sep);margin-top:8px;padding-top:10px;display:flex;flex-direction:column;gap:7px;">'
+  var photoRow='<div style="border-top:.5px solid var(--sep);margin-top:8px;padding:10px 14px 12px;display:flex;flex-direction:column;gap:7px;">'
     +'<div style="font-size:12px;color:var(--hint);font-weight:500;">📸 Фото: '+pc+' шт</div>';
   if(pc<10){
     photoRow+='<div style="display:flex;gap:7px;margin-top:2px;">'
