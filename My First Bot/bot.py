@@ -1,3 +1,4 @@
+import asyncio
 import io
 import json
 import logging
@@ -304,7 +305,8 @@ async def _watermark_photo(bot, file_id: str) -> bytes:
     tg_file = await bot.get_file(file_id)
     img_bytes = bytes(await tg_file.download_as_bytearray())
     try:
-        return _add_watermark(img_bytes)
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, _add_watermark, img_bytes)
     except Exception as e:
         logger.warning(f"Watermark failed: {e}")
         return img_bytes
@@ -387,7 +389,7 @@ async def post_to_channel(context, listing: dict) -> list[int]:
     caption = listing_caption(listing)
     photos = json.loads(listing["photo_ids"])
     try:
-        watermarked = [await _watermark_photo(context.bot, pid) for pid in photos]
+        watermarked = await asyncio.gather(*[_watermark_photo(context.bot, pid) for pid in photos])
         if len(watermarked) == 1:
             msg = await context.bot.send_photo(
                 chat_id=CHANNEL_ID,
