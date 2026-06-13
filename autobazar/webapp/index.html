@@ -193,14 +193,14 @@ var CUR_YEAR=new Date().getFullYear();
 // ── CAR DATABASE ──
 // Popular brands shown immediately; full search via NHTSA API
 var BRANDS_POPULAR=[
-  'Audi','BMW','Chevrolet','Chrysler','Citroen','Cupra','Dacia','Dodge','DS','Ferrari',
+  'Audi','BMW','Chevrolet','Chrysler','Citroen','Cupra','Dacia','Daewoo','Dodge','DS','Ferrari',
   'Fiat','Ford','Honda','Hyundai','Infiniti','Jaguar','Jeep','Kia','Lamborghini',
   'Land Rover','Lexus','Maserati','Mazda','Mercedes-Benz','MG','Mini','Mitsubishi',
   'Nissan','Opel','Peugeot','Porsche','Renault','Rolls-Royce','Seat','Skoda','Smart',
   'Subaru','Suzuki','Tesla','Toyota','Volkswagen','Volvo','BYD','NIO','Lynk & Co',
-  'Alfa Romeo','Aston Martin','Bentley','Bugatti','Cadillac','Genesis','GMC',
-  'Great Wall','Haval','Honda','Isuzu','Lada','Lancia','Lincoln','Lotus','McLaren',
-  'Mclaren','Polestar','RAM','Saab','SEAT','SsangYong','Trabant','Triumph'
+  'Alfa Romeo','Aston Martin','Bentley','Bugatti','Cadillac','Chery','Daihatsu','Genesis','GMC',
+  'Great Wall','Haval','Isuzu','Lada','Lancia','Lincoln','Lotus','McLaren',
+  'Polestar','RAM','Saab','SEAT','SsangYong','Trabant','Triumph','ZAZ','Geely','Scion'
 ];
 
 var modelsCache={};
@@ -322,7 +322,7 @@ function buildModelSearch(currentVal,currentBrand,stateKey){
   if(currentBrand){
     fetchModels(currentBrand,function(models){
       var mc=gi('model-ac');if(!mc)return;
-      if(!models.length){mc.innerHTML='<div class="ac-hint">Модели не найдены</div>';return;}
+      if(!models.length){mc.innerHTML='<div class="ac-hint">Модели не найдены в базе — введите вручную в поле выше</div>';return;}
       var cur=gi('model-q')?gi('model-q').value:'';
       renderModelChips(models,cur,stateKey);
     });
