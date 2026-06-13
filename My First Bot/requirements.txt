@@ -2,3 +2,4 @@ anthropic>=0.109.1
 python-telegram-bot[job-queue]>=22.5
 python-dotenv>=1.2.1
 aiosqlite>=0.20.0
+Pillow>=10.1.0

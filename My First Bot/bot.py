@@ -1,3 +1,4 @@
+import io
 import json
 import logging
 import os
@@ -7,7 +8,7 @@ from urllib.parse import quote
 
 import anthropic
 from dotenv import load_dotenv
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputFile, InputMediaPhoto, Update
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -24,10 +25,15 @@ from database import (
     extend_listing,
     get_expired_listings,
     get_listing,
+    get_listings_expiring_soon,
     get_user_listings,
+    hide_listing,
     init_db,
+    mark_warning_sent,
     search_listings,
+    unhide_listing,
     update_listing_channel_msgs,
+    update_listing_field,
 )
 
 load_dotenv()
@@ -53,6 +59,9 @@ if _missing:
 
 # ====== СОСТОЯНИЯ ДИАЛОГА: поиск ======
 SEARCH_MAKE, SEARCH_MODEL, SEARCH_PRICE_MAX = range(20, 23)
+
+# ====== СОСТОЯНИЯ ДИАЛОГА: редактирование ======
+EDIT_CHOOSE_FIELD, EDIT_PRICE, EDIT_DESCRIPTION = range(30, 33)
 
 FUEL_TYPES = ["Бензин", "Дизель", "Электро", "Газ/Бензин"]
 TRANSMISSION_TYPES = ["Автомат", "Механика"]
@@ -247,6 +256,58 @@ async def _validate_photo_is_car(bot, file_id: str) -> bool:
         return True
 
 
+# ====== ВАТЕРМАРК ======
+
+def _add_watermark(img_bytes: bytes) -> bytes:
+    from PIL import Image, ImageDraw, ImageFont
+    img = Image.open(io.BytesIO(img_bytes)).convert("RGBA")
+    w, h = img.size
+    overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+
+    text = "@autobazar_nederland"
+    font_size = max(20, w // 25)
+    font = None
+    for fp in [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
+    ]:
+        try:
+            font = ImageFont.truetype(fp, font_size)
+            break
+        except Exception:
+            pass
+    if font is None:
+        try:
+            font = ImageFont.load_default(size=font_size)
+        except TypeError:
+            font = ImageFont.load_default()
+
+    bbox = draw.textbbox((0, 0), text, font=font)
+    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    margin, pad = 12, 6
+    x, y = w - tw - margin, h - th - margin
+    draw.rectangle([x - pad, y - pad, x + tw + pad, y + th + pad], fill=(0, 0, 0, 160))
+    draw.text((x, y), text, fill=(255, 255, 255, 240), font=font)
+
+    result = Image.alpha_composite(img, overlay).convert("RGB")
+    out = io.BytesIO()
+    result.save(out, format="JPEG", quality=90)
+    return out.getvalue()
+
+
+async def _watermark_photo(bot, file_id: str) -> bytes:
+    tg_file = await bot.get_file(file_id)
+    img_bytes = bytes(await tg_file.download_as_bytearray())
+    try:
+        return _add_watermark(img_bytes)
+    except Exception as e:
+        logger.warning(f"Watermark failed: {e}")
+        return img_bytes
+
+
 # ====== ФОРМАТИРОВАНИЕ ОБЪЯВЛЕНИЯ ======
 
 def _contact(listing: dict) -> str:
@@ -324,19 +385,23 @@ async def post_to_channel(context, listing: dict) -> list[int]:
     caption = listing_caption(listing)
     photos = json.loads(listing["photo_ids"])
     try:
-        if len(photos) == 1:
+        watermarked = [await _watermark_photo(context.bot, pid) for pid in photos]
+        if len(watermarked) == 1:
             msg = await context.bot.send_photo(
-                chat_id=CHANNEL_ID, photo=photos[0], caption=caption, parse_mode="HTML"
+                chat_id=CHANNEL_ID,
+                photo=InputFile(io.BytesIO(watermarked[0]), filename="photo.jpg"),
+                caption=caption,
+                parse_mode="HTML",
             )
             return [msg.message_id]
         else:
             media = [
                 InputMediaPhoto(
-                    media=pid,
+                    media=InputFile(io.BytesIO(wm), filename=f"photo_{i}.jpg"),
                     caption=caption if i == 0 else None,
                     parse_mode="HTML" if i == 0 else None,
                 )
-                for i, pid in enumerate(photos)
+                for i, wm in enumerate(watermarked)
             ]
             msgs = await context.bot.send_media_group(chat_id=CHANNEL_ID, media=media)
             return [m.message_id for m in msgs]
@@ -882,9 +947,25 @@ async def my_listings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for item in items:
         expires = datetime.fromisoformat(item["expires_at"])
         days_left = (expires - now).days
-        icon = "✅" if item["status"] == "active" and days_left >= 0 else "⏰"
-        status_str = f"ещё {days_left} дн." if days_left >= 0 else "истекло"
+        if item["status"] == "hidden":
+            icon = "🙈"
+            status_str = "скрыто"
+        elif days_left >= 0:
+            icon = "✅"
+            status_str = f"ещё {days_left} дн."
+        else:
+            icon = "⏰"
+            status_str = "истекло"
         text += f"{icon} <b>#{item['id']}</b> — {item['make']} {item['model']} {item['year']} — {item['price']:,} EUR ({status_str})\n"
+        hide_btn = (
+            InlineKeyboardButton(f"👁 Показать #{item['id']}", callback_data=f"unhide_{item['id']}")
+            if item["status"] == "hidden"
+            else InlineKeyboardButton(f"🙈 Скрыть #{item['id']}", callback_data=f"hide_{item['id']}")
+        )
+        keyboard.append([
+            InlineKeyboardButton(f"✏️ Изменить #{item['id']}", callback_data=f"edit_{item['id']}"),
+            hide_btn,
+        ])
         keyboard.append([
             InlineKeyboardButton(f"🔄 Продлить #{item['id']}", callback_data=f"extend_{item['id']}"),
             InlineKeyboardButton(f"🗑 #{item['id']}", callback_data=f"del_{item['id']}"),
@@ -1183,7 +1264,155 @@ async def post_welcome(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("✅ Приветственный пост опубликован и закреплён в канале!")
 
 
+# ====== РЕДАКТИРОВАНИЕ ОБЪЯВЛЕНИЯ ======
+
+async def edit_listing_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    listing_id = int(query.data.split("_")[1])
+    listing = await get_listing(listing_id)
+    if not listing or listing["user_id"] != query.from_user.id:
+        await query.answer("❌ Нет доступа", show_alert=True)
+        return ConversationHandler.END
+    context.user_data["editing_listing_id"] = listing_id
+    await query.edit_message_text(
+        f"✏️ <b>Редактирование #{listing_id}</b>\n"
+        f"{listing['make']} {listing['model']} {listing['year']}\n\n"
+        "Что изменить?",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("💶 Цену", callback_data="editf_price")],
+            [InlineKeyboardButton("📝 Описание", callback_data="editf_desc")],
+            [InlineKeyboardButton("❌ Отмена", callback_data="my_listings")],
+        ]),
+    )
+    return EDIT_CHOOSE_FIELD
+
+
+async def edit_choose_field(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    if query.data == "editf_price":
+        listing_id = context.user_data.get("editing_listing_id")
+        listing = await get_listing(listing_id)
+        await query.edit_message_text(
+            f"💶 Текущая цена: <b>{listing['price']:,} EUR</b>\n\nВведите новую цену:",
+            parse_mode="HTML",
+        )
+        return EDIT_PRICE
+    else:
+        listing_id = context.user_data.get("editing_listing_id")
+        listing = await get_listing(listing_id)
+        await query.edit_message_text(
+            f"📝 Текущее описание:\n<i>{listing['description']}</i>\n\nВведите новое описание:",
+            parse_mode="HTML",
+        )
+        return EDIT_DESCRIPTION
+
+
+async def edit_price_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text.strip().replace(" ", "").replace(",", "")
+    if not text.isdigit() or int(text) <= 0:
+        await update.message.reply_text("⚠️ Введите корректную цену числом, например: 12000")
+        return EDIT_PRICE
+    listing_id = context.user_data.get("editing_listing_id")
+    new_price = int(text)
+    await update_listing_field(listing_id, "price", new_price)
+    listing = await get_listing(listing_id)
+    old_ids = json.loads(listing.get("channel_message_ids") or "[]")
+    await delete_from_channel(context, old_ids)
+    msg_ids = await post_to_channel(context, listing)
+    await update_listing_channel_msgs(listing_id, msg_ids)
+    await update.message.reply_text(
+        f"✅ Цена обновлена: <b>{new_price:,} EUR</b>. Объявление переопубликовано.",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📋 Мои объявления", callback_data="my_listings")]]),
+    )
+    return ConversationHandler.END
+
+
+async def edit_description_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text.strip()
+    if len(text) < 20:
+        await update.message.reply_text("⚠️ Описание слишком короткое (минимум 20 символов).")
+        return EDIT_DESCRIPTION
+    listing_id = context.user_data.get("editing_listing_id")
+    await update_listing_field(listing_id, "description", text)
+    listing = await get_listing(listing_id)
+    old_ids = json.loads(listing.get("channel_message_ids") or "[]")
+    await delete_from_channel(context, old_ids)
+    msg_ids = await post_to_channel(context, listing)
+    await update_listing_channel_msgs(listing_id, msg_ids)
+    await update.message.reply_text(
+        "✅ Описание обновлено. Объявление переопубликовано.",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📋 Мои объявления", callback_data="my_listings")]]),
+    )
+    return ConversationHandler.END
+
+
+async def edit_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Редактирование отменено.", reply_markup=main_menu_keyboard())
+    return ConversationHandler.END
+
+
+# ====== СКРЫТИЕ ОБЪЯВЛЕНИЯ ======
+
+async def hide_listing_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    listing_id = int(query.data.split("_")[1])
+    listing = await get_listing(listing_id)
+    if not listing or listing["user_id"] != query.from_user.id:
+        await query.answer("❌ Нет доступа", show_alert=True)
+        return
+    old_ids = json.loads(listing.get("channel_message_ids") or "[]")
+    await delete_from_channel(context, old_ids)
+    await update_listing_channel_msgs(listing_id, [])
+    await hide_listing(listing_id)
+    await query.answer(f"🙈 Объявление #{listing_id} скрыто из канала", show_alert=True)
+    await my_listings(update, context)
+
+
+async def unhide_listing_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    listing_id = int(query.data.split("_")[1])
+    listing = await get_listing(listing_id)
+    if not listing or listing["user_id"] != query.from_user.id:
+        await query.answer("❌ Нет доступа", show_alert=True)
+        return
+    await unhide_listing(listing_id)
+    listing = await get_listing(listing_id)
+    msg_ids = await post_to_channel(context, listing)
+    await update_listing_channel_msgs(listing_id, msg_ids)
+    await query.answer(f"👁 Объявление #{listing_id} снова опубликовано", show_alert=True)
+    await my_listings(update, context)
+
+
 # ====== ФОНОВЫЕ ЗАДАЧИ ======
+
+async def check_expiry_warnings(context: ContextTypes.DEFAULT_TYPE):
+    listings = await get_listings_expiring_soon()
+    for listing in listings:
+        expires = datetime.fromisoformat(listing["expires_at"])
+        days_left = (expires - datetime.now()).days + 1
+        try:
+            await context.bot.send_message(
+                chat_id=listing["user_id"],
+                text=(
+                    f"⏰ <b>Объявление #{listing['id']} истекает через {days_left} дн.</b>\n"
+                    f"🚗 {listing['make']} {listing['model']} {listing['year']}\n\n"
+                    "Продлить объявление ещё на 30 дней?"
+                ),
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton(f"🔄 Продлить #{listing['id']}", callback_data=f"extend_{listing['id']}"),
+                ]]),
+            )
+            await mark_warning_sent(listing["id"])
+        except Exception as e:
+            logger.warning(f"Не удалось отправить напоминание пользователю {listing['user_id']}: {e}")
+
 
 async def daily_repost(context: ContextTypes.DEFAULT_TYPE):
     listings = await search_listings()
@@ -1214,8 +1443,8 @@ async def post_init(app: Application):
     await init_db()
     # 09:00 UTC = 11:00 Amsterdam (летнее время)
     app.job_queue.run_daily(daily_repost, time=dt_time(9, 0, 0))
-    # Очистка истёкших в 08:00 UTC
     app.job_queue.run_daily(cleanup_expired, time=dt_time(8, 0, 0))
+    app.job_queue.run_daily(check_expiry_warnings, time=dt_time(10, 0, 0))
     logger.info("База данных инициализирована. Фоновые задачи запущены.")
 
 
@@ -1290,15 +1519,29 @@ def main():
         per_message=False,
     )
 
+    edit_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(edit_listing_start, pattern=r"^edit_\d+$")],
+        states={
+            EDIT_CHOOSE_FIELD: [CallbackQueryHandler(edit_choose_field, pattern="^editf_")],
+            EDIT_PRICE:        [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_price_handler)],
+            EDIT_DESCRIPTION:  [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_description_handler)],
+        },
+        fallbacks=[CommandHandler("cancel", edit_cancel)],
+        per_message=False,
+    )
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("mylistings", my_listings))
     app.add_handler(CommandHandler("welcome", post_welcome))
     app.add_handler(listing_conv)
     app.add_handler(search_conv)
+    app.add_handler(edit_conv)
     app.add_handler(CallbackQueryHandler(my_listings, pattern="^my_listings$"))
     app.add_handler(CallbackQueryHandler(extend_listing_handler, pattern=r"^extend_\d+$"))
     app.add_handler(CallbackQueryHandler(delete_listing_ask, pattern=r"^del_\d+$"))
     app.add_handler(CallbackQueryHandler(delete_listing_confirm, pattern=r"^confirm_del_\d+$"))
+    app.add_handler(CallbackQueryHandler(hide_listing_handler, pattern=r"^hide_\d+$"))
+    app.add_handler(CallbackQueryHandler(unhide_listing_handler, pattern=r"^unhide_\d+$"))
     app.add_handler(CallbackQueryHandler(go_main_menu, pattern="^main_menu$"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, ai_fallback))
 

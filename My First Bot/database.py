@@ -33,11 +33,11 @@ async def init_db():
                 city                TEXT,
                 description         TEXT,
                 photo_ids           TEXT,
-                channel_message_ids TEXT
+                channel_message_ids TEXT,
+                warning_sent        INTEGER DEFAULT 0
             )
         """)
-        # Migration: add phone column if table existed before
-        for col in ("phone TEXT", "engine TEXT", "turbo TEXT"):
+        for col in ("phone TEXT", "engine TEXT", "turbo TEXT", "warning_sent INTEGER DEFAULT 0"):
             try:
                 await db.execute(f"ALTER TABLE listings ADD COLUMN {col}")
             except Exception:
@@ -102,7 +102,7 @@ async def extend_listing(listing_id: int):
     async with aiosqlite.connect(DB_PATH) as db:
         expires = (datetime.now() + timedelta(days=30)).isoformat()
         await db.execute(
-            "UPDATE listings SET expires_at = ?, status = 'active' WHERE id = ?",
+            "UPDATE listings SET expires_at = ?, status = 'active', warning_sent = 0 WHERE id = ?",
             (expires, listing_id),
         )
         await db.commit()
@@ -110,9 +110,27 @@ async def extend_listing(listing_id: int):
 
 async def delete_listing(listing_id: int):
     async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            "UPDATE listings SET status = 'deleted' WHERE id = ?", (listing_id,)
-        )
+        await db.execute("UPDATE listings SET status = 'deleted' WHERE id = ?", (listing_id,))
+        await db.commit()
+
+
+async def hide_listing(listing_id: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("UPDATE listings SET status = 'hidden' WHERE id = ?", (listing_id,))
+        await db.commit()
+
+
+async def unhide_listing(listing_id: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("UPDATE listings SET status = 'active' WHERE id = ?", (listing_id,))
+        await db.commit()
+
+
+async def update_listing_field(listing_id: int, field: str, value):
+    if field not in {"price", "description"}:
+        raise ValueError(f"Field {field} not allowed")
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(f"UPDATE listings SET {field} = ? WHERE id = ?", (value, listing_id))
         await db.commit()
 
 
@@ -121,10 +139,30 @@ async def get_expired_listings() -> list:
         db.row_factory = aiosqlite.Row
         now = datetime.now().isoformat()
         cursor = await db.execute(
-            "SELECT * FROM listings WHERE status = 'active' AND expires_at < ?",
-            (now,),
+            "SELECT * FROM listings WHERE status = 'active' AND expires_at < ?", (now,)
         )
         return [dict(r) for r in await cursor.fetchall()]
+
+
+async def get_listings_expiring_soon() -> list:
+    """Active listings expiring in 1–4 days that haven't been warned yet."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        now = datetime.now()
+        in_4_days = (now + timedelta(days=4)).isoformat()
+        in_1_day = (now + timedelta(days=1)).isoformat()
+        cursor = await db.execute(
+            "SELECT * FROM listings WHERE status = 'active' "
+            "AND expires_at BETWEEN ? AND ? AND warning_sent = 0",
+            (in_1_day, in_4_days),
+        )
+        return [dict(r) for r in await cursor.fetchall()]
+
+
+async def mark_warning_sent(listing_id: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("UPDATE listings SET warning_sent = 1 WHERE id = ?", (listing_id,))
+        await db.commit()
 
 
 async def search_listings(make=None, model=None, price_max=None, city=None) -> list:
