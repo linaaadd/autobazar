@@ -673,7 +673,19 @@ function doPublish(){
 function renderListingCard(l){
   var sc=l.status==='hidden'?'status-hidden':l.days_left<=3?'status-expired':'status-active';
   var st=l.status==='hidden'?'🙈 Скрыто':l.days_left<=3?'⏰ '+l.days_left+' дн.':'✅ '+l.days_left+' дн.';
-  return '<div class="listing-card"><div class="listing-card-header"><div class="listing-title">'+l.make+' '+l.model+' '+l.year+'</div><div class="listing-meta">📍 '+l.city+' · 🛣 '+Number(l.mileage).toLocaleString('ru')+' км</div><div class="listing-price">€'+Number(l.price).toLocaleString('ru')+'</div><span class="listing-status '+sc+'">'+st+'</span></div><div class="listing-actions"><button class="la-btn" onclick="act(\'edit\','+l.id+')">✏️ Изменить</button><button class="la-btn" onclick="act(\''+(l.status==='hidden'?'unhide':'hide')+'\','+l.id+')">'+(l.status==='hidden'?'👁 Показать':'🙈 Скрыть')+'</button><button class="la-btn" onclick="act(\'extend\','+l.id+')">🔄 Продлить</button><button class="la-btn red" onclick="act(\'delete\','+l.id+')">🗑 Удалить</button></div></div>';
+  var pc=l.photo_count||0;
+  var photoRow='<div style="border-top:.5px solid var(--sep);margin-top:8px;padding-top:8px;">'
+    +'<div style="font-size:11px;color:var(--hint);margin-bottom:6px;">📸 Фото: '+pc+' шт</div>';
+  if(pc<10){
+    photoRow+='<div style="display:flex;gap:7px;">'
+      +'<button class="la-btn" style="flex:1;color:var(--green)" onclick="act(\'photo_add\','+l.id+')">➕ Добавить фото</button>'
+      +'<button class="la-btn" style="flex:1;color:var(--orange)" onclick="act(\'photo_replace\','+l.id+')">✏️ Изменить фото</button>'
+      +'</div>';
+  } else {
+    photoRow+='<button class="la-btn" style="width:100%;color:var(--orange)" onclick="act(\'photo_replace\','+l.id+')">✏️ Изменить фото</button>';
+  }
+  photoRow+='</div>';
+  return '<div class="listing-card"><div class="listing-card-header"><div class="listing-title">'+l.make+' '+l.model+' '+l.year+'</div><div class="listing-meta">📍 '+l.city+' · 🛣 '+Number(l.mileage).toLocaleString('ru')+' км</div><div class="listing-price">€'+Number(l.price).toLocaleString('ru')+'</div><span class="listing-status '+sc+'">'+st+'</span></div><div class="listing-actions"><button class="la-btn" onclick="act(\'edit\','+l.id+')">✏️ Изменить</button><button class="la-btn" onclick="act(\''+(l.status==='hidden'?'unhide':'hide')+'\','+l.id+')">'+(l.status==='hidden'?'👁 Показать':'🙈 Скрыть')+'</button><button class="la-btn" onclick="act(\'extend\','+l.id+')">🔄 Продлить</button><button class="la-btn red" onclick="act(\'delete\','+l.id+')">🗑 Удалить</button></div>'+photoRow+'</div>';
 }
 function renderMyListings(){
   var el=gi('my-list');

@@ -39,6 +39,7 @@ from database import (
     unhide_listing,
     update_listing_channel_msgs,
     update_listing_field,
+    update_listing_photo_ids,
     update_listing_watermarked_photos,
 )
 
@@ -831,17 +832,19 @@ async def _api_listings(request: aio_web.Request) -> aio_web.Response:
                 days_left = max(0, (exp_date - date.today()).days)
             except Exception:
                 pass
+        photo_ids = json.loads(r.get("photo_ids") or "[]")
         listings.append({
-            "id":        r["id"],
-            "make":      r.get("make", ""),
-            "model":     r.get("model", ""),
-            "year":      r.get("year", ""),
-            "price":     r.get("price", 0),
-            "mileage":   r.get("mileage", 0),
-            "city":      r.get("city", ""),
+            "id":          r["id"],
+            "make":        r.get("make", ""),
+            "model":       r.get("model", ""),
+            "year":        r.get("year", ""),
+            "price":       r.get("price", 0),
+            "mileage":     r.get("mileage", 0),
+            "city":        r.get("city", ""),
             "status":      r.get("status", "active"),
             "days_left":   days_left,
             "description": r.get("description", ""),
+            "photo_count": len(photo_ids),
         })
     return _cors(aio_web.Response(
         content_type="application/json",
@@ -966,6 +969,37 @@ async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
             f"Теперь отправьте <b>фотографии</b> (от 1 до 10).\n"
             f"Когда загрузите все — нажмите кнопку ниже.",
             parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("✅ Фото готовы", callback_data="webapp_photos_done"),
+            ]]),
+        )
+
+    # ── ФОТО: ДОБАВИТЬ / ИЗМЕНИТЬ ──
+    elif action in ("photo_add", "photo_replace"):
+        listing_id = data.get("id")
+        listing = await get_listing(listing_id) if listing_id else None
+        if not listing or listing.get("user_id") != update.effective_user.id:
+            await update.message.reply_text("⚠️ Объявление не найдено.", reply_markup=kb)
+            return
+        existing = json.loads(listing.get("photo_ids") or "[]")
+        is_add = action == "photo_add"
+        max_new = 10 - len(existing) if is_add else 10
+        context.user_data["webapp_photos"] = []
+        context.user_data[_WEBAPP_AWAIT_PHOTOS] = True
+        context.user_data["webapp_photo_listing_id"] = listing_id
+        context.user_data["webapp_photo_mode"] = "add" if is_add else "replace"
+        if is_add:
+            msg = (f"➕ <b>Добавление фото</b>\n\n"
+                   f"🚗 {listing['make']} {listing['model']} {listing['year']}\n"
+                   f"Сейчас фото: {len(existing)} шт. Можно добавить ещё {max_new}.\n\n"
+                   f"Отправьте новые фото и нажмите кнопку ниже.")
+        else:
+            msg = (f"✏️ <b>Замена фото</b>\n\n"
+                   f"🚗 {listing['make']} {listing['model']} {listing['year']}\n"
+                   f"Текущие {len(existing)} фото будут заменены.\n\n"
+                   f"Отправьте новые фото (1–10) и нажмите кнопку ниже.")
+        await update.message.reply_text(
+            msg, parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("✅ Фото готовы", callback_data="webapp_photos_done"),
             ]]),
@@ -1113,6 +1147,46 @@ async def webapp_photos_done(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
 
     context.user_data[_WEBAPP_AWAIT_PHOTOS] = False
+    photo_mode = context.user_data.pop("webapp_photo_mode", None)
+    photo_listing_id = context.user_data.pop("webapp_photo_listing_id", None)
+
+    # ── Обновление фото существующего объявления ──
+    if photo_mode in ("add", "replace") and photo_listing_id:
+        listing = await get_listing(photo_listing_id)
+        if not listing or listing.get("user_id") != update.effective_user.id:
+            await query.edit_message_text("⚠️ Объявление не найдено.")
+            return
+        if photo_mode == "add":
+            existing = json.loads(listing.get("photo_ids") or "[]")
+            new_ids = (existing + photos)[:10]
+        else:
+            new_ids = photos
+        await query.edit_message_text("⏳ Обновляю фото…")
+        try:
+            await update_listing_photo_ids(photo_listing_id, new_ids)
+            listing = await get_listing(photo_listing_id)
+            old_ids = json.loads(listing.get("channel_message_ids") or "[]")
+            await delete_from_channel(context, old_ids)
+            msg_ids, wm_ids = await post_to_channel(context, listing)
+            await update_listing_channel_msgs(photo_listing_id, msg_ids)
+            if wm_ids:
+                await update_listing_watermarked_photos(photo_listing_id, wm_ids)
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text=f"🎉 <b>Фото обновлены!</b>\nОбъявление переопубликовано в канал. Фото: {len(new_ids)} шт.",
+                parse_mode="HTML",
+                reply_markup=webapp_keyboard(update.effective_user.id),
+            )
+        except Exception as exc:
+            logger.error(f"photo update error: {exc}")
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="❌ Ошибка при обновлении фото.",
+                reply_markup=webapp_keyboard(update.effective_user.id),
+            )
+        return
+
+    # ── Новое объявление ──
     listing_data = context.user_data.get("webapp_listing", {})
     user = update.effective_user
 

@@ -108,6 +108,15 @@ async def extend_listing(listing_id: int):
         await db.commit()
 
 
+async def update_listing_photo_ids(listing_id: int, photo_ids: list):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE listings SET photo_ids=?, watermarked_photo_ids=NULL WHERE id=?",
+            (json.dumps(photo_ids), listing_id),
+        )
+        await db.commit()
+
+
 async def update_listing_watermarked_photos(listing_id: int, file_ids: list):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
