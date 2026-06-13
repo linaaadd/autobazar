@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>AutoBazar NL</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+
+:root {
+  --bg: var(--tg-theme-bg-color, #1c1c1e);
+  --bg2: var(--tg-theme-secondary-bg-color, #2c2c2e);
+  --text: var(--tg-theme-text-color, #fff);
+  --hint: var(--tg-theme-hint-color, #8e8e93);
+  --link: var(--tg-theme-link-color, #3a8fd9);
+  --btn: var(--tg-theme-button-color, #185fa5);
+  --btntext: var(--tg-theme-button-text-color, #fff);
+  --sep: rgba(128,128,128,0.2);
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  padding-bottom: 68px;
+  overflow-x: hidden;
+}
+
+/* ======= TAB BAR ======= */
+#tabbar {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+  display: flex;
+  background: var(--bg2);
+  border-top: 0.5px solid var(--sep);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.tab {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  gap: 3px; padding: 9px 4px 11px;
+  background: none; border: none; cursor: pointer;
+  color: var(--hint); font-size: 10px; transition: color 0.15s;
+}
+.tab.active { color: var(--link); }
+.tab-icon { font-size: 22px; }
+
+/* ======= SCREENS ======= */
+.screen { display: none; }
+.screen.active { display: block; }
+
+/* ======= HEADER ======= */
+.screen-header {
+  padding: 16px 16px 10px;
+  font-size: 20px; font-weight: 700; letter-spacing: -0.3px;
+}
+
+/* ======= SEARCH SCREEN ======= */
+.active-summary {
+  margin: 0 12px 10px;
+  background: var(--bg2);
+  border-radius: 12px; padding: 10px 13px;
+  border-left: 3px solid var(--link);
+  font-size: 13px;
+}
+.active-summary-label {
+  font-size: 11px; font-weight: 600; color: var(--link);
+  text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 3px;
+}
+.active-summary-val { color: var(--hint); font-style: italic; }
+
+.filter-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 8px; padding: 0 12px 12px;
+}
+.fbtn {
+  background: var(--bg2);
+  border: 0.5px solid var(--sep);
+  border-radius: 13px; padding: 10px 12px;
+  text-align: left; cursor: pointer; color: inherit;
+}
+.fbtn.has-val { border-color: var(--link); }
+.fbtn-label { font-size: 11px; color: var(--hint); display: block; margin-bottom: 3px; }
+.fbtn-val {
+  font-size: 13px; font-weight: 500;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 4px;
+}
+.fbtn.has-val .fbtn-val { color: var(--link); }
+.fbtn-arrow { opacity: 0.5; font-size: 15px; }
+
+/* ======= PRIMARY BUTTON ======= */
+.primary-btn {
+  display: block; width: calc(100% - 24px); margin: 6px 12px;
+  padding: 14px; background: var(--btn); color: var(--btntext);
+  border: none; border-radius: 13px; font-size: 15px; font-weight: 600;
+  cursor: pointer; transition: opacity 0.15s;
+}
+.primary-btn:active { opacity: 0.8; }
+.primary-btn:disabled { opacity: 0.5; }
+
+/* ======= PANEL OVERLAY ======= */
+#panel-overlay {
+  position: fixed; inset: 0; z-index: 200;
+  background: var(--bg);
+  transform: translateX(100%);
+  transition: transform 0.28s cubic-bezier(0.4,0,0.2,1);
+  display: flex; flex-direction: column;
+}
+#panel-overlay.open { transform: translateX(0); }
+
+.panel-nav {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 0.5px solid var(--sep); flex-shrink: 0;
+}
+.back-btn {
+  background: none; border: none; color: var(--link);
+  font-size: 15px; cursor: pointer; padding: 6px 10px 6px 0;
+  display: flex; align-items: center; gap: 4px;
+}
+.panel-nav-title { font-size: 17px; font-weight: 600; }
+.panel-body { padding: 16px; overflow-y: auto; flex: 1; }
+
+/* ======= CHIPS ======= */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  border: 0.5px solid var(--sep); border-radius: 20px; padding: 7px 15px;
+  font-size: 14px; cursor: pointer;
+  background: var(--bg2); color: var(--text); transition: all 0.15s;
+}
+.chip.sel {
+  background: rgba(58,143,217,0.15);
+  border-color: var(--link); color: var(--link); font-weight: 500;
+}
+.chip.sel::before { content: "✓ "; }
+
+/* ======= RANGE INPUTS ======= */
+.range-row { display: flex; gap: 8px; margin-top: 12px; }
+.inp {
+  flex: 1; padding: 11px 13px;
+  background: var(--bg2); border: 0.5px solid var(--sep);
+  border-radius: 11px; font-size: 14px; color: var(--text); outline: none;
+}
+.inp:focus { border-color: var(--link); }
+.inp::placeholder { color: var(--hint); }
+
+/* ======= PUBLISH FORM ======= */
+.form-sep {
+  margin: 8px 0 0;
+  padding: 10px 14px 4px;
+  font-size: 12px; font-weight: 600; color: var(--hint);
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+.req::after { content: " *"; color: #ff6b6b; }
+.form-field { padding: 0 12px 10px; }
+.form-chips { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 8px; }
+.form-chip {
+  border: 0.5px solid var(--sep); border-radius: 20px; padding: 6px 13px;
+  font-size: 13px; cursor: pointer;
+  background: var(--bg2); color: var(--text); transition: all 0.15s;
+}
+.form-chip.sel {
+  background: rgba(58,143,217,0.15);
+  border-color: var(--link); color: var(--link); font-weight: 500;
+}
+.form-inp {
+  width: 100%; padding: 12px 13px;
+  background: var(--bg2); border: 0.5px solid var(--sep);
+  border-radius: 11px; font-size: 14px; color: var(--text); outline: none;
+  font-family: inherit;
+}
+.form-inp:focus { border-color: var(--link); }
+.form-inp::placeholder { color: var(--hint); }
+textarea.form-inp { resize: none; min-height: 88px; line-height: 1.45; }
+
+.info-note {
+  margin: 0 12px 12px;
+  background: var(--bg2); border-radius: 11px;
+  padding: 10px 13px; font-size: 12px; color: var(--hint);
+  border-left: 2px solid var(--link);
+}
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ===== SEARCH SCREEN ===== -->
+  <div class="screen active" id="screen-search">
+    <div class="screen-header">🔍 Поиск авто</div>
+    <div class="active-summary">
+      <div class="active-summary-label">Фильтры</div>
+      <div class="active-summary-val" id="summary-text">ничего не выбрано</div>
+    </div>
+    <div class="filter-grid">
+      <button class="fbtn" id="fb-brand" onclick="openPanel('brand')">
+        <span class="fbtn-label">Марка</span>
+        <span class="fbtn-val"><span id="v-brand">Любая</span><span class="fbtn-arrow">›</span></span>
+      </button>
+      <button class="fbtn" id="fb-year" onclick="openPanel('year')">
+        <span class="fbtn-label">Год выпуска</span>
+        <span class="fbtn-val"><span id="v-year">Любой</span><span class="fbtn-arrow">›</span></span>
+      </button>
+      <button class="fbtn" id="fb-price" onclick="openPanel('price')">
+        <span class="fbtn-label">Цена (€)</span>
+        <span class="fbtn-val"><span id="v-price">Любая</span><span class="fbtn-arrow">›</span></span>
+      </button>
+      <button class="fbtn" id="fb-fuel" onclick="openPanel('fuel')">
+        <span class="fbtn-label">Топливо</span>
+        <span class="fbtn-val"><span id="v-fuel">Любое</span><span class="fbtn-arrow">›</span></span>
+      </button>
+      <button class="fbtn" id="fb-trans" onclick="openPanel('trans')">
+        <span class="fbtn-label">Коробка</span>
+        <span class="fbtn-val"><span id="v-trans">Любая</span><span class="fbtn-arrow">›</span></span>
+      </button>
+      <button class="fbtn" id="fb-city" onclick="openPanel('city')">
+        <span class="fbtn-label">Город</span>
+        <span class="fbtn-val"><span id="v-city">Любой</span><span class="fbtn-arrow">›</span></span>
+      </button>
+    </div>
+    <button class="primary-btn" onclick="doSearch()">🔍 Найти автомобили</button>
+  </div>
+
+  <!-- ===== PUBLISH SCREEN ===== -->
+  <div class="screen" id="screen-publish">
+    <div class="screen-header">📝 Подать объявление</div>
+    <div class="info-note">💡 После заполнения формы бот попросит фотографии</div>
+
+    <div class="form-sep req">Марка</div>
+    <div class="form-field">
+      <div class="form-chips" id="chips-make">
+        <button class="form-chip" onclick="pickChip('make',this,'Toyota')">Toyota</button>
+        <button class="form-chip" onclick="pickChip('make',this,'BMW')">BMW</button>
+        <button class="form-chip" onclick="pickChip('make',this,'Mercedes')">Mercedes</button>
+        <button class="form-chip" onclick="pickChip('make',this,'Volkswagen')">Volkswagen</button>
+        <button class="form-chip" onclick="pickChip('make',this,'Audi')">Audi</button>
+        <button class="form-chip" onclick="pickChip('make',this,'Škoda')">Škoda</button>
+        <button class="form-chip" onclick="pickChip('make',this,'Ford')">Ford</button>
+        <button class="form-chip" onclick="pickChip('make',this,'Hyundai')">Hyundai</button>
+        <button class="form-chip" onclick="pickChip('make',this,'Kia')">Kia</button>
+        <button class="form-chip" onclick="pickChip('make',this,'Opel')">Opel</button>
+        <button class="form-chip" onclick="pickChip('make',this,'Renault')">Renault</button>
+        <button class="form-chip" onclick="pickChip('make',this,'Volvo')">Volvo</button>
+        <button class="form-chip" onclick="pickChip('make',this,'Peugeot')">Peugeot</button>
+        <button class="form-chip" onclick="pickChip('make',this,'Mazda')">Mazda</button>
+        <button class="form-chip" onclick="pickChip('make',this,'Honda')">Honda</button>
+        <button class="form-chip" onclick="pickChip('make',this,'Nissan')">Nissan</button>
+      </div>
+      <input class="form-inp" id="f-make-custom" placeholder="Другая марка…" oninput="if(this.value.trim()){clearChips('make');f.make=''}" style="margin-top:6px">
+    </div>
+
+    <div class="form-sep req">Модель</div>
+    <div class="form-field">
+      <input class="form-inp" id="f-model" placeholder="Например: Camry, 3-series, E-Class…">
+    </div>
+
+    <div class="form-sep req">Год выпуска</div>
+    <div class="form-field">
+      <div class="form-chips" id="chips-year-pub"></div>
+      <input class="form-inp" id="f-year-custom" type="number" placeholder="Другой год (1990–2026)" min="1990" max="2026" style="margin-top:6px">
+    </div>
+
+    <div class="form-sep req">Пробег (км)</div>
+    <div class="form-field">
+      <input class="form-inp" id="f-mileage" type="number" placeholder="Например: 75 000">
+    </div>
+
+    <div class="form-sep req">Цена (€)</div>
+    <div class="form-field">
+      <input class="form-inp" id="f-price" type="number" placeholder="Например: 14 500">
+    </div>
+
+    <div class="form-sep req">Топливо</div>
+    <div class="form-field">
+      <div class="form-chips">
+        <button class="form-chip" onclick="pickChip('fuel',this,'Бензин')">Бензин</button>
+        <button class="form-chip" onclick="pickChip('fuel',this,'Дизель')">Дизель</button>
+        <button class="form-chip" onclick="pickChip('fuel',this,'Газ/Бензин')">Газ/Бензин</button>
+        <button class="form-chip" onclick="pickChip('fuel',this,'Электро')">Электро</button>
+        <button class="form-chip" onclick="pickChip('fuel',this,'Гибрид')">Гибрид</button>
+      </div>
+    </div>
+
+    <div class="form-sep req">Коробка передач</div>
+    <div class="form-field">
+      <div class="form-chips">
+        <button class="form-chip" onclick="pickChip('transmission',this,'Автомат')">Автомат</button>
+        <button class="form-chip" onclick="pickChip('transmission',this,'Механика')">Механика</button>
+        <button class="form-chip" onclick="pickChip('transmission',this,'Вариатор')">Вариатор</button>
+        <button class="form-chip" onclick="pickChip('transmission',this,'Робот')">Робот</button>
+      </div>
+    </div>
+
+    <div class="form-sep">Объём двигателя (л)</div>
+    <div class="form-field">
+      <div class="form-chips">
+        <button class="form-chip" onclick="pickChip('engine',this,'1.0')">1.0</button>
+        <button class="form-chip" onclick="pickChip('engine',this,'1.2')">1.2</button>
+        <button class="form-chip" onclick="pickChip('engine',this,'1.4')">1.4</button>
+        <button class="form-chip" onclick="pickChip('engine',this,'1.6')">1.6</button>
+        <button class="form-chip" onclick="pickChip('engine',this,'1.8')">1.8</button>
+        <button class="form-chip" onclick="pickChip('engine',this,'2.0')">2.0</button>
+        <button class="form-chip" onclick="pickChip('engine',this,'2.5')">2.5</button>
+        <button class="form-chip" onclick="pickChip('engine',this,'3.0')">3.0</button>
+        <button class="form-chip" onclick="pickChip('engine',this,'Электро')">Электро</button>
+      </div>
+    </div>
+
+    <div class="form-sep req">Город</div>
+    <div class="form-field">
+      <div class="form-chips">
+        <button class="form-chip" onclick="pickChip('city',this,'Amsterdam')">Amsterdam</button>
+        <button class="form-chip" onclick="pickChip('city',this,'Rotterdam')">Rotterdam</button>
+        <button class="form-chip" onclick="pickChip('city',this,'Utrecht')">Utrecht</button>
+        <button class="form-chip" onclick="pickChip('city',this,'Den Haag')">Den Haag</button>
+        <button class="form-chip" onclick="pickChip('city',this,'Eindhoven')">Eindhoven</button>
+        <button class="form-chip" onclick="pickChip('city',this,'Tilburg')">Tilburg</button>
+        <button class="form-chip" onclick="pickChip('city',this,'Groningen')">Groningen</button>
+        <button class="form-chip" onclick="pickChip('city',this,'Almere')">Almere</button>
+        <button class="form-chip" onclick="pickChip('city',this,'Breda')">Breda</button>
+        <button class="form-chip" onclick="pickChip('city',this,'Nijmegen')">Nijmegen</button>
+        <button class="form-chip" onclick="pickChip('city',this,'Arnhem')">Arnhem</button>
+        <button class="form-chip" onclick="pickChip('city',this,'Haarlem')">Haarlem</button>
+      </div>
+      <input class="form-inp" id="f-city-custom" placeholder="Другой город…" style="margin-top:6px">
+    </div>
+
+    <div class="form-sep">Телефон (WhatsApp/Telegram)</div>
+    <div class="form-field">
+      <input class="form-inp" id="f-phone" type="tel" placeholder="+31 6 12345678">
+    </div>
+
+    <div class="form-sep req">Описание</div>
+    <div class="form-field">
+      <textarea class="form-inp" id="f-description" rows="5"
+        placeholder="Расскажите о состоянии автомобиля, комплектации, истории обслуживания…"></textarea>
+    </div>
+
+    <button class="primary-btn" onclick="doPublish()" style="margin-top:4px; margin-bottom:4px">📤 Отправить данные</button>
+    <div style="height:4px"></div>
+  </div>
+
+</div><!-- #app -->
+
+<!-- ===== FILTER PANEL ===== -->
+<div id="panel-overlay">
+  <div class="panel-nav">
+    <button class="back-btn" onclick="closePanel()">‹ Назад</button>
+    <span class="panel-nav-title" id="panel-title">Фильтр</span>
+  </div>
+  <div class="panel-body" id="panel-body"></div>
+</div>
+
+<!-- ===== TAB BAR ===== -->
+<div id="tabbar">
+  <button class="tab active" id="tab-search" onclick="showTab('search')">
+    <span class="tab-icon">🔍</span>
+    <span>Поиск</span>
+  </button>
+  <button class="tab" id="tab-publish" onclick="showTab('publish')">
+    <span class="tab-icon">📝</span>
+    <span>Подать</span>
+  </button>
+</div>
+
+<script>
+// ======= TELEGRAM INIT =======
+const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : {
+  ready(){}, expand(){}, sendData(d){alert('Data: '+d)},
+  showAlert(m){alert(m)}, close(){}
+};
+tg.ready();
+tg.expand();
+
+// ======= SEARCH STATE =======
+const sv = { brand:'', year_from:'', year_to:'', price_max:'', fuel:'', transmission:'', city:'' };
+
+const BRANDS = ['Toyota','BMW','Mercedes','Volkswagen','Audi','Škoda','Ford',
+  'Hyundai','Kia','Opel','Renault','Volvo','Peugeot','Mazda','Honda','Nissan'];
+const CITIES = ['Amsterdam','Rotterdam','Utrecht','Den Haag','Eindhoven','Tilburg',
+  'Groningen','Almere','Breda','Nijmegen','Arnhem','Haarlem','Zaandam','Amersfoort','Apeldoorn'];
+
+const PANELS = {
+  brand: {
+    title: 'Марка',
+    html() {
+      const chips = BRANDS.map(b =>
+        `<button class="chip${sv.brand===b?' sel':''}" onclick="pickS('brand',this,'${b}')">${b}</button>`
+      ).join('');
+      return `
+        <div class="chips">${chips}</div>
+        <div style="margin-top:14px;font-size:12px;color:var(--hint)">Или введите вручную:</div>
+        <input class="inp" id="brand-other" placeholder="Другая марка…" value="${sv.brand&&!BRANDS.includes(sv.brand)?sv.brand:''}" style="margin-top:6px">
+        <button class="primary-btn" style="margin-top:14px" onclick="applyBrand()">Применить</button>`;
+    }
+  },
+  year: {
+    title: 'Год выпуска',
+    html() {
+      return `
+        <div style="font-size:13px;color:var(--hint);margin-bottom:10px">Укажите диапазон:</div>
+        <div class="range-row">
+          <input class="inp" id="y-from" type="number" placeholder="От (2010)" min="1990" max="2026" value="${sv.year_from||''}">
+          <input class="inp" id="y-to" type="number" placeholder="До (2025)" min="1990" max="2026" value="${sv.year_to||''}">
+        </div>
+        <button class="primary-btn" style="margin-top:14px" onclick="applyYear()">Применить</button>`;
+    }
+  },
+  price: {
+    title: 'Цена (€)',
+    html() {
+      const presets = [[5000,'до €5 000'],[10000,'до €10 000'],[15000,'до €15 000'],
+        [20000,'до €20 000'],[30000,'до €30 000'],[50000,'до €50 000']];
+      const chips = presets.map(([v,l]) =>
+        `<button class="chip${sv.price_max==v?' sel':''}" onclick="pickS('price_max',this,${v})">${l}</button>`
+      ).join('');
+      return `
+        <div class="chips">${chips}</div>
+        <div style="margin-top:14px;font-size:12px;color:var(--hint)">Или введите сумму:</div>
+        <input class="inp" id="price-inp" type="number" placeholder="Максимальная цена €" style="margin-top:6px" value="${sv.price_max&&![5000,10000,15000,20000,30000,50000].includes(sv.price_max)?sv.price_max:''}">
+        <button class="primary-btn" style="margin-top:14px" onclick="applyPrice()">Применить</button>`;
+    }
+  },
+  fuel: {
+    title: 'Топливо',
+    html() {
+      return `<div class="chips">${['Бензин','Дизель','Газ/Бензин','Электро','Гибрид'].map(f =>
+        `<button class="chip${sv.fuel===f?' sel':''}" onclick="pickS('fuel',this,'${f}');closePanel()">${f}</button>`
+      ).join('')}</div>`;
+    }
+  },
+  trans: {
+    title: 'Коробка передач',
+    html() {
+      return `<div class="chips">${['Автомат','Механика','Вариатор','Робот'].map(t =>
+        `<button class="chip${sv.transmission===t?' sel':''}" onclick="pickS('transmission',this,'${t}');closePanel()">${t}</button>`
+      ).join('')}</div>`;
+    }
+  },
+  city: {
+    title: 'Город',
+    html() {
+      return `<div class="chips">${CITIES.map(c =>
+        `<button class="chip${sv.city===c?' sel':''}" onclick="pickS('city',this,'${c}');closePanel()">${c}</button>`
+      ).join('')}</div>`;
+    }
+  }
+};
+
+let curPanel = '';
+function openPanel(id) {
+  curPanel = id;
+  const p = PANELS[id];
+  document.getElementById('panel-title').textContent = p.title;
+  document.getElementById('panel-body').innerHTML = p.html();
+  document.getElementById('panel-overlay').classList.add('open');
+}
+function closePanel() {
+  document.getElementById('panel-overlay').classList.remove('open');
+  updateSummary();
+}
+
+function pickS(key, el, val) {
+  sv[key] = val;
+  if (el && el.parentElement) {
+    el.parentElement.querySelectorAll('.chip').forEach(c => c.classList.remove('sel'));
+    el.classList.add('sel');
+  }
+  const fbMap = {brand:'brand',year_from:null,year_to:null,price_max:'price',fuel:'fuel',transmission:'trans',city:'city'};
+  const vMap  = {brand:'v-brand',price_max:'v-price',fuel:'v-fuel',transmission:'v-trans',city:'v-city'};
+  const vEl = vMap[key] ? document.getElementById(vMap[key]) : null;
+  if (vEl) {
+    vEl.textContent = key==='price_max' ? `до €${Number(val).toLocaleString('ru')}` : val;
+  }
+  const fbId = fbMap[key];
+  if (fbId) document.getElementById('fb-'+fbId)?.classList.add('has-val');
+}
+
+function applyBrand() {
+  const inp = document.getElementById('brand-other');
+  const val = (inp && inp.value.trim()) ? inp.value.trim() : sv.brand;
+  if (val) {
+    sv.brand = val;
+    document.getElementById('v-brand').textContent = val;
+    document.getElementById('fb-brand').classList.add('has-val');
+  }
+  closePanel();
+}
+function applyYear() {
+  const f = parseInt(document.getElementById('y-from').value)||0;
+  const t = parseInt(document.getElementById('y-to').value)||0;
+  sv.year_from = f || '';
+  sv.year_to   = t || '';
+  const label = f&&t ? `${f}–${t}` : f ? `от ${f}` : t ? `до ${t}` : '';
+  if (label) {
+    document.getElementById('v-year').textContent = label;
+    document.getElementById('fb-year').classList.add('has-val');
+  }
+  closePanel();
+}
+function applyPrice() {
+  const v = parseInt(document.getElementById('price-inp').value)||0;
+  if (v) {
+    sv.price_max = v;
+    document.getElementById('v-price').textContent = `до €${v.toLocaleString('ru')}`;
+    document.getElementById('fb-price').classList.add('has-val');
+  }
+  closePanel();
+}
+
+function updateSummary() {
+  const parts = [];
+  if (sv.brand) parts.push(sv.brand);
+  if (sv.year_from || sv.year_to) parts.push((sv.year_from||'?')+' – '+(sv.year_to||'?'));
+  if (sv.price_max) parts.push('до €'+Number(sv.price_max).toLocaleString('ru'));
+  if (sv.fuel) parts.push(sv.fuel);
+  if (sv.transmission) parts.push(sv.transmission);
+  if (sv.city) parts.push(sv.city);
+  const el = document.getElementById('summary-text');
+  if (parts.length) {
+    el.textContent = parts.join(' · ');
+    el.style.fontStyle = 'normal';
+    el.style.color = 'var(--text)';
+  } else {
+    el.textContent = 'ничего не выбрано';
+    el.style.fontStyle = 'italic';
+    el.style.color = 'var(--hint)';
+  }
+}
+
+function doSearch() {
+  const data = {action:'search', brand:sv.brand||null, year_from:sv.year_from||null,
+    year_to:sv.year_to||null, price_max:sv.price_max||null,
+    fuel:sv.fuel||null, transmission:sv.transmission||null, city:sv.city||null};
+  tg.sendData(JSON.stringify(data));
+}
+
+// ======= PUBLISH STATE =======
+const f = {make:'',model:'',year:'',mileage:'',price:'',fuel:'',transmission:'',engine:'',city:'',phone:'',description:''};
+
+function pickChip(key, el, val) {
+  f[key] = val;
+  const container = el.closest('.form-chips');
+  if (container) container.querySelectorAll('.form-chip').forEach(c => c.classList.remove('sel'));
+  el.classList.add('sel');
+}
+function clearChips(key) {
+  // deselect chips for a key (called when user types custom value)
+  const chipContainers = document.querySelectorAll('.form-chips');
+  // We can't easily target by key here, but chips' onclick contains the key
+  // Just clear from parent field
+}
+
+// Build year chips for publish
+(function() {
+  const el = document.getElementById('chips-year-pub');
+  if (!el) return;
+  const cur = new Date().getFullYear();
+  el.innerHTML = Array.from({length:12}, (_,i) => cur-i).map(y =>
+    `<button class="form-chip" onclick="pickChip('year',this,${y})">${y}</button>`
+  ).join('');
+})();
+
+function doPublish() {
+  // Read free-text overrides
+  const makeCustom = document.getElementById('f-make-custom').value.trim();
+  if (makeCustom) f.make = makeCustom;
+  f.model       = document.getElementById('f-model').value.trim();
+  const yearCustom = document.getElementById('f-year-custom').value.trim();
+  if (yearCustom) f.year = yearCustom;
+  f.mileage     = document.getElementById('f-mileage').value.trim();
+  f.price       = document.getElementById('f-price').value.trim();
+  const cityCustom = document.getElementById('f-city-custom').value.trim();
+  if (cityCustom) f.city = cityCustom;
+  f.phone       = document.getElementById('f-phone').value.trim();
+  f.description = document.getElementById('f-description').value.trim();
+
+  const required = [
+    [f.make,        'Марка'],
+    [f.model,       'Модель'],
+    [f.year,        'Год выпуска'],
+    [f.mileage,     'Пробег'],
+    [f.price,       'Цена'],
+    [f.fuel,        'Топливо'],
+    [f.transmission,'Коробка передач'],
+    [f.city,        'Город'],
+    [f.description, 'Описание'],
+  ];
+  for (const [val, label] of required) {
+    if (!val) { tg.showAlert(`Заполните поле: ${label}`); return; }
+  }
+  if (f.description.length < 15) {
+    tg.showAlert('Описание слишком короткое — добавьте больше деталей.');
+    return;
+  }
+
+  const payload = {
+    action: 'publish',
+    make:         f.make,
+    model:        f.model,
+    year:         parseInt(f.year),
+    mileage:      parseInt(f.mileage),
+    price:        parseInt(f.price),
+    fuel:         f.fuel,
+    transmission: f.transmission,
+    engine:       f.engine || '',
+    city:         f.city,
+    phone:        f.phone,
+    description:  f.description,
+  };
+  tg.sendData(JSON.stringify(payload));
+}
+
+// ======= TAB NAVIGATION =======
+function showTab(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('screen-'+name).classList.add('active');
+  document.getElementById('tab-'+name).classList.add('active');
+}
+
+// Initial tab from URL param
+const initTab = new URLSearchParams(window.location.search).get('tab') || 'search';
+showTab(initTab);
+</script>
+</body>
+</html>

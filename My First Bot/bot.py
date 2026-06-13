@@ -9,7 +9,8 @@ from urllib.parse import quote
 
 import anthropic
 from dotenv import load_dotenv
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, Update
+from aiohttp import web as aio_web
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, Update, WebAppInfo
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -42,6 +43,8 @@ load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 CHANNEL_ID = os.getenv("CHANNEL_ID")
+WEBAPP_URL = os.getenv("WEBAPP_URL", "").rstrip("/")
+WEBAPP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "webapp")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -184,6 +187,20 @@ def search_price_keyboard() -> InlineKeyboardMarkup:
 
 
 def main_menu_keyboard():
+    if WEBAPP_URL:
+        return InlineKeyboardMarkup([
+            [InlineKeyboardButton(
+                "🚗 Разместить объявление",
+                web_app=WebAppInfo(url=f"{WEBAPP_URL}/webapp?tab=publish"),
+            )],
+            [
+                InlineKeyboardButton(
+                    "🔍 Поиск авто",
+                    web_app=WebAppInfo(url=f"{WEBAPP_URL}/webapp?tab=search"),
+                ),
+                InlineKeyboardButton("📋 Мои объявления", callback_data="my_listings"),
+            ],
+        ])
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("🚗 Разместить объявление", callback_data="new_listing")],
         [
@@ -1335,13 +1352,15 @@ async def edit_price_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     return ConversationHandler.END
 
 
-def _edit_ai_keyboard(ai_done: bool = False) -> InlineKeyboardMarkup:
-    rows = []
-    if not ai_done:
-        rows.append([InlineKeyboardButton("✨ Улучшить описание AI", callback_data="edit_ai_improve")])
-    else:
-        rows.append([InlineKeyboardButton("↩️ Вернуть оригинал", callback_data="edit_ai_revert")])
-    rows.append([InlineKeyboardButton("✅ Готово", callback_data="edit_done")])
+def _edit_desc_keyboard(ai_done: bool = False) -> InlineKeyboardMarkup:
+    rows = [
+        [InlineKeyboardButton("✅ Опубликовать", callback_data="edit_desc_confirm")],
+        [InlineKeyboardButton("✨ Улучшить описание AI", callback_data="edit_desc_ai")],
+    ]
+    if ai_done:
+        rows.append([InlineKeyboardButton("↩️ Вернуть оригинал", callback_data="edit_desc_revert_ai")])
+    rows.append([InlineKeyboardButton("✏️ Изменить заново", callback_data="edit_desc_retry")])
+    rows.append([InlineKeyboardButton("❌ Отмена", callback_data="edit_done")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -1351,58 +1370,23 @@ async def edit_description_handler(update: Update, context: ContextTypes.DEFAULT
         await update.message.reply_text("⚠️ Описание слишком короткое (минимум 20 символов).")
         return EDIT_DESCRIPTION
     context.user_data["edit_new_desc"] = text
+    context.user_data["edit_original_desc"] = text
     await update.message.reply_text(
         "📝 <b>Новое описание:</b>\n\n"
-        f"<i>{text}</i>\n\n"
-        "Опубликовать в канале?",
+        f"<i>{text}</i>",
         parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("✅ Опубликовать", callback_data="edit_desc_confirm")],
-            [InlineKeyboardButton("✏️ Изменить заново", callback_data="edit_desc_retry")],
-            [InlineKeyboardButton("❌ Отмена", callback_data="edit_done")],
-        ]),
+        reply_markup=_edit_desc_keyboard(ai_done=False),
     )
     return EDIT_DESC_CONFIRM
 
 
-async def edit_desc_confirm_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    await query.edit_message_text("⏳ Публикую обновлённое объявление...")
-    listing_id = context.user_data.get("editing_listing_id")
-    text = context.user_data.get("edit_new_desc", "")
-    context.user_data["edit_original_desc"] = text
-    try:
-        await update_listing_field(listing_id, "description", text)
-        listing = await get_listing(listing_id)
-        old_ids = json.loads(listing.get("channel_message_ids") or "[]")
-        await delete_from_channel(context, old_ids)
-        msg_ids = await post_to_channel(context, listing)
-        await update_listing_channel_msgs(listing_id, msg_ids)
-    except Exception as e:
-        logger.error(f"edit_desc_confirm error: {e}")
-    await query.edit_message_text(
-        "✅ Описание обновлено и объявление переопубликовано.\n\n"
-        f"📝 <i>{text}</i>",
-        parse_mode="HTML",
-        reply_markup=_edit_ai_keyboard(ai_done=False),
-    )
-    return EDIT_AI_CONFIRM
-
-
-async def edit_desc_retry_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    await query.edit_message_text("✏️ Введите новое описание:")
-    return EDIT_DESCRIPTION
-
-
-async def edit_ai_improve(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def edit_desc_ai_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer("✨ Улучшаю...")
     await query.edit_message_text("⏳ Генерирую улучшенное описание...")
     listing_id = context.user_data.get("editing_listing_id")
     listing = await get_listing(listing_id)
+    current_desc = context.user_data.get("edit_new_desc", listing["description"])
     try:
         client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
         response = await client.messages.create(
@@ -1415,59 +1399,74 @@ async def edit_ai_improve(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"Топливо: {listing['fuel']}\n"
                 f"КПП: {listing['transmission']}\n"
                 f"Город: {listing['city']}\n"
-                f"Исходное описание: {listing['description']}\n\n"
+                f"Исходное описание: {current_desc}\n\n"
                 "Напиши только текст описания (2–4 предложения). Без заголовков, без цены, без контактов."
             )}],
         )
         improved = response.content[0].text.strip()
+        context.user_data["edit_new_desc"] = improved
     except Exception as e:
         logger.error(f"AI edit error: {e}")
-        await query.edit_message_text(
-            "⚠️ Не удалось улучшить описание. Попробуйте позже.",
-            reply_markup=_edit_ai_keyboard(ai_done=False),
-        )
-        return EDIT_AI_CONFIRM
-    await update_listing_field(listing_id, "description", improved)
-    listing = await get_listing(listing_id)
-    old_ids = json.loads(listing.get("channel_message_ids") or "[]")
-    await delete_from_channel(context, old_ids)
-    msg_ids = await post_to_channel(context, listing)
-    await update_listing_channel_msgs(listing_id, msg_ids)
+        improved = current_desc
     await query.edit_message_text(
         "✨ <b>AI улучшило описание:</b>\n\n"
-        f"📝 <i>{improved}</i>\n\n"
-        "Объявление переопубликовано.",
+        f"<i>{improved}</i>",
         parse_mode="HTML",
-        reply_markup=_edit_ai_keyboard(ai_done=True),
+        reply_markup=_edit_desc_keyboard(ai_done=True),
     )
-    return EDIT_AI_CONFIRM
+    return EDIT_DESC_CONFIRM
 
 
-async def edit_ai_revert(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def edit_desc_revert_ai_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    listing_id = context.user_data.get("editing_listing_id")
     original = context.user_data.get("edit_original_desc", "")
-    await update_listing_field(listing_id, "description", original)
-    listing = await get_listing(listing_id)
-    old_ids = json.loads(listing.get("channel_message_ids") or "[]")
-    await delete_from_channel(context, old_ids)
-    msg_ids = await post_to_channel(context, listing)
-    await update_listing_channel_msgs(listing_id, msg_ids)
+    context.user_data["edit_new_desc"] = original
     await query.edit_message_text(
-        "↩️ Описание возвращено к оригиналу.\n\n"
-        f"📝 <i>{original}</i>",
+        "↩️ <b>Оригинальное описание:</b>\n\n"
+        f"<i>{original}</i>",
         parse_mode="HTML",
-        reply_markup=_edit_ai_keyboard(ai_done=False),
+        reply_markup=_edit_desc_keyboard(ai_done=False),
     )
-    return EDIT_AI_CONFIRM
+    return EDIT_DESC_CONFIRM
+
+
+async def edit_desc_confirm_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text("⏳ Публикую обновлённое объявление...")
+    listing_id = context.user_data.get("editing_listing_id")
+    text = context.user_data.get("edit_new_desc", "")
+    try:
+        await update_listing_field(listing_id, "description", text)
+        listing = await get_listing(listing_id)
+        old_ids = json.loads(listing.get("channel_message_ids") or "[]")
+        await delete_from_channel(context, old_ids)
+        msg_ids = await post_to_channel(context, listing)
+        await update_listing_channel_msgs(listing_id, msg_ids)
+        result_text = "✅ Описание обновлено и объявление переопубликовано."
+    except Exception as e:
+        logger.error(f"edit_desc_confirm error: {e}")
+        result_text = "⚠️ Ошибка при публикации. Описание сохранено в базе."
+    await query.edit_message_text(
+        result_text,
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📋 Мои объявления", callback_data="my_listings")]]),
+    )
+    return ConversationHandler.END
+
+
+async def edit_desc_retry_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text("✏️ Введите новое описание:")
+    return EDIT_DESCRIPTION
 
 
 async def edit_ai_done(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     await query.edit_message_text(
-        "✅ Готово.",
+        "❌ Изменение отменено.",
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📋 Мои объявления", callback_data="my_listings")]]),
     )
     return ConversationHandler.END
@@ -1562,6 +1561,195 @@ async def cleanup_expired(context: ContextTypes.DEFAULT_TYPE):
         logger.info(f"Очистка: {len(expired)} истёкших объявлений удалено")
 
 
+# ====== WEB SERVER ======
+
+async def _serve_webapp(request: aio_web.Request) -> aio_web.Response:
+    filepath = os.path.join(WEBAPP_DIR, "index.html")
+    try:
+        with open(filepath, "r", encoding="utf-8") as fh:
+            return aio_web.Response(content_type="text/html", text=fh.read())
+    except FileNotFoundError:
+        return aio_web.Response(status=404, text="Not found")
+
+
+async def _healthcheck(request: aio_web.Request) -> aio_web.Response:
+    return aio_web.Response(text="OK")
+
+
+# ====== TELEGRAM MINI APP HANDLERS ======
+
+_WEBAPP_AWAIT_PHOTOS = "webapp_await_photos"
+
+
+async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    raw = update.message.web_app_data.data
+    try:
+        data = json.loads(raw)
+    except Exception:
+        await update.message.reply_text("⚠️ Ошибка обработки данных. Попробуйте ещё раз.")
+        return
+
+    action = data.get("action")
+
+    if action == "search":
+        price_max = data.get("price_max")
+        results = await search_listings(
+            make=data.get("brand") or None,
+            price_max=int(price_max) if price_max else None,
+            city=data.get("city") or None,
+        )
+        # In-memory filters for fields not in search_listings
+        if data.get("fuel"):
+            results = [r for r in results if r.get("fuel") == data["fuel"]]
+        if data.get("transmission"):
+            results = [r for r in results if r.get("transmission") == data["transmission"]]
+        if data.get("year_from"):
+            results = [r for r in results if (r.get("year") or 0) >= int(data["year_from"])]
+        if data.get("year_to"):
+            results = [r for r in results if (r.get("year") or 9999) <= int(data["year_to"])]
+
+        if not results:
+            await update.message.reply_text(
+                "🔍 По вашим фильтрам объявлений не найдено.\n\n"
+                "Попробуйте расширить критерии поиска.",
+                reply_markup=main_menu_keyboard(),
+            )
+            return
+
+        total = len(results)
+        await update.message.reply_text(
+            f"🔍 Найдено: <b>{total}</b> объявлений\n\n"
+            f"Показываю первые {min(5, total)}:",
+            parse_mode="HTML",
+        )
+        for listing in results[:5]:
+            caption = listing_caption(listing)
+            photos = json.loads(listing.get("photo_ids") or "[]")
+            if photos:
+                await context.bot.send_photo(
+                    chat_id=update.effective_chat.id,
+                    photo=photos[0],
+                    caption=caption,
+                    parse_mode="HTML",
+                )
+            else:
+                await update.message.reply_text(caption, parse_mode="HTML")
+        if total > 5:
+            await update.message.reply_text(
+                f"...и ещё {total - 5} объявлений. Уточните фильтры для лучших результатов.",
+                reply_markup=main_menu_keyboard(),
+            )
+        else:
+            await update.message.reply_text("↩️ Главное меню:", reply_markup=main_menu_keyboard())
+
+    elif action == "publish":
+        context.user_data["webapp_listing"] = data
+        context.user_data["webapp_photos"] = []
+        context.user_data[_WEBAPP_AWAIT_PHOTOS] = True
+        make = data.get("make", "")
+        model = data.get("model", "")
+        year = data.get("year", "")
+        price = int(data.get("price", 0))
+        await update.message.reply_text(
+            f"✅ <b>Данные получены!</b>\n\n"
+            f"🚗 {make} {model} {year}\n"
+            f"💶 €{price:,}\n\n"
+            f"Теперь отправьте <b>фотографии</b> (от 1 до 10).\n"
+            f"Когда загрузите все — нажмите кнопку ниже.",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("✅ Фото готовы", callback_data="webapp_photos_done"),
+            ]]),
+        )
+    else:
+        await update.message.reply_text("⚠️ Неизвестное действие.", reply_markup=main_menu_keyboard())
+
+
+async def collect_webapp_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not context.user_data.get(_WEBAPP_AWAIT_PHOTOS):
+        return
+    photos = context.user_data.get("webapp_photos", [])
+    if len(photos) >= 10:
+        await update.message.reply_text(
+            "⚠️ Максимум 10 фотографий. Нажмите «Фото готовы».",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton(f"✅ Фото готовы ({len(photos)} шт)", callback_data="webapp_photos_done"),
+            ]]),
+        )
+        return
+    photos.append(update.message.photo[-1].file_id)
+    context.user_data["webapp_photos"] = photos
+    await update.message.reply_text(
+        f"📸 Фото {len(photos)}/10 добавлено.",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton(f"✅ Фото готовы ({len(photos)} шт)", callback_data="webapp_photos_done"),
+        ]]),
+    )
+
+
+async def webapp_photos_done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+
+    if not context.user_data.get(_WEBAPP_AWAIT_PHOTOS):
+        return
+
+    photos = context.user_data.get("webapp_photos", [])
+    if not photos:
+        await query.edit_message_text(
+            "⚠️ Нет фотографий. Пожалуйста, отправьте хотя бы одно фото.",
+        )
+        return
+
+    context.user_data[_WEBAPP_AWAIT_PHOTOS] = False
+    listing_data = context.user_data.get("webapp_listing", {})
+    user = update.effective_user
+
+    full_data = {
+        "user_id":      user.id,
+        "username":     user.username,
+        "make":         listing_data.get("make", ""),
+        "model":        listing_data.get("model", ""),
+        "year":         int(listing_data.get("year") or 0),
+        "mileage":      int(listing_data.get("mileage") or 0),
+        "price":        int(listing_data.get("price") or 0),
+        "currency":     "EUR",
+        "fuel":         listing_data.get("fuel", ""),
+        "transmission": listing_data.get("transmission", ""),
+        "engine":       listing_data.get("engine", ""),
+        "turbo":        "",
+        "city":         listing_data.get("city", ""),
+        "phone":        listing_data.get("phone", ""),
+        "description":  listing_data.get("description", ""),
+        "photo_ids":    photos,
+    }
+
+    await query.edit_message_text("⏳ Публикую объявление…")
+    try:
+        listing_id = await create_listing(full_data)
+        listing = await get_listing(listing_id)
+        msg_ids = await post_to_channel(context, listing)
+        await update_listing_channel_msgs(listing_id, msg_ids)
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=(
+                f"🎉 <b>Объявление опубликовано!</b>\n\n"
+                f"🚗 {full_data['make']} {full_data['model']} {full_data['year']}\n"
+                f"💶 €{full_data['price']:,}\n"
+                f"📍 {full_data['city']}"
+            ),
+            parse_mode="HTML",
+            reply_markup=main_menu_keyboard(),
+        )
+    except Exception as exc:
+        logger.error(f"webapp_photos_done publish error: {exc}")
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="❌ Ошибка при публикации. Попробуйте ещё раз.",
+            reply_markup=main_menu_keyboard(),
+        )
+
+
 # ====== ЗАПУСК ======
 
 async def post_init(app: Application):
@@ -1572,13 +1760,32 @@ async def post_init(app: Application):
     app.job_queue.run_daily(check_expiry_warnings, time=dt_time(10, 0, 0))
     logger.info("База данных инициализирована. Фоновые задачи запущены.")
 
+    # Start aiohttp web server for Telegram Mini App
+    port = int(os.getenv("PORT", 8080))
+    web_app = aio_web.Application()
+    web_app.router.add_get("/", _healthcheck)
+    web_app.router.add_get("/health", _healthcheck)
+    web_app.router.add_get("/webapp", _serve_webapp)
+    web_app.router.add_get("/webapp/", _serve_webapp)
+    runner = aio_web.AppRunner(web_app)
+    await runner.setup()
+    await aio_web.TCPSite(runner, "0.0.0.0", port).start()
+    app.bot_data["web_runner"] = runner
+    logger.info(f"✅ Web server запущен на порту {port}")
+
+
+async def post_shutdown(app: Application):
+    runner = app.bot_data.get("web_runner")
+    if runner:
+        await runner.cleanup()
+        logger.info("Web server остановлен.")
+
 
 def main():
-    app = Application.builder().token(TELEGRAM_TOKEN).post_init(post_init).build()
+    app = Application.builder().token(TELEGRAM_TOKEN).post_init(post_init).post_shutdown(post_shutdown).build()
 
     listing_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(new_listing_start, pattern="^new_listing$")],
-        # === ИЗМЕНЕНО: states listing_conv ===
         states={
             ASK_MAKE: [
                 CallbackQueryHandler(got_make_button, pattern="^make_"),
@@ -1652,12 +1859,9 @@ def main():
             EDIT_DESCRIPTION:  [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_description_handler)],
             EDIT_DESC_CONFIRM: [
                 CallbackQueryHandler(edit_desc_confirm_handler, pattern="^edit_desc_confirm$"),
+                CallbackQueryHandler(edit_desc_ai_handler, pattern="^edit_desc_ai$"),
+                CallbackQueryHandler(edit_desc_revert_ai_handler, pattern="^edit_desc_revert_ai$"),
                 CallbackQueryHandler(edit_desc_retry_handler, pattern="^edit_desc_retry$"),
-                CallbackQueryHandler(edit_ai_done, pattern="^edit_done$"),
-            ],
-            EDIT_AI_CONFIRM: [
-                CallbackQueryHandler(edit_ai_improve, pattern="^edit_ai_improve$"),
-                CallbackQueryHandler(edit_ai_revert, pattern="^edit_ai_revert$"),
                 CallbackQueryHandler(edit_ai_done, pattern="^edit_done$"),
             ],
         },
@@ -1678,6 +1882,10 @@ def main():
     app.add_handler(CallbackQueryHandler(hide_listing_handler, pattern=r"^hide_\d+$"))
     app.add_handler(CallbackQueryHandler(unhide_listing_handler, pattern=r"^unhide_\d+$"))
     app.add_handler(CallbackQueryHandler(go_main_menu, pattern="^main_menu$"))
+    # Mini App handlers
+    app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_webapp_data))
+    app.add_handler(MessageHandler(filters.PHOTO, collect_webapp_photo))
+    app.add_handler(CallbackQueryHandler(webapp_photos_done, pattern="^webapp_photos_done$"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, ai_fallback))
 
     logger.info("✅ AutoBazar Bot запущен!")
