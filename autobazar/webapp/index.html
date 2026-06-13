@@ -561,7 +561,8 @@ var PDEFS={
       return '<textarea class="inp" id="pi" rows="8" placeholder="Расскажите о состоянии, комплектации, истории обслуживания…" maxlength="700" oninput="updDescCounter(this)">'+cur+'</textarea>'
         +'<div id="desc-counter" style="text-align:right;font-size:12px;color:'+col+';margin-top:4px;">'+cur.length+'/700</div>'
         +'<div style="margin-top:8px;font-size:12px;color:var(--hint);margin-bottom:6px;">ИИ улучшит грамматику, стиль и сделает объявление привлекательнее</div>'
-        +'<button class="btn btn-ai" onclick="aiImprove()">✨ Улучшить с ИИ</button>';
+        +'<button class="btn btn-ai" onclick="aiImprove()">✨ Улучшить с ИИ</button>'
+        +'<button id="ai-revert-btn" class="link-btn" style="display:none;margin-top:4px;width:100%;text-align:center;" onclick="aiRevert()">↩️ Вернуть оригинал</button>';
     },
     apply:function(){
       var val=(gi('pi').value||'').trim();
@@ -614,22 +615,30 @@ function updDescCounter(ta){
   el.style.color=n>700?'var(--red)':n>600?'var(--orange)':'var(--hint)';
 }
 
+var _origDesc='';
 function aiImprove(){
   var txt=(gi('pi').value||'').trim();
   if(txt.length<10){tg.showAlert('Сначала напишите описание.');return;}
+  _origDesc=txt;
   var btn=document.querySelector('.btn-ai');
   if(btn){btn.disabled=true;btn.textContent='⏳ Улучшаю...';}
   fetch('/api/ai_improve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:txt})})
     .then(function(r){return r.json();})
     .then(function(d){
       if(d.improved){
-        var txt=d.improved.length>700?d.improved.slice(0,699)+'…':d.improved;
-        gi('pi').value=txt;pv.description=txt;updDescCounter(gi('pi'));
-        tg.showAlert('✅ Описание улучшено!');
+        var improved=d.improved.length>700?d.improved.slice(0,699)+'…':d.improved;
+        gi('pi').value=improved;pv.description=improved;updDescCounter(gi('pi'));
+        var rb=gi('ai-revert-btn');
+        if(rb)rb.style.display='block';
       }
     })
     .catch(function(){tg.showAlert('Ошибка ИИ, попробуйте ещё раз.');})
     .finally(function(){if(btn){btn.disabled=false;btn.textContent='✨ Улучшить с ИИ';}});
+}
+function aiRevert(){
+  if(!_origDesc)return;
+  gi('pi').value=_origDesc;pv.description=_origDesc;updDescCounter(gi('pi'));
+  var rb=gi('ai-revert-btn');if(rb)rb.style.display='none';
 }
 
 function updS(key,vid,label){
@@ -674,15 +683,15 @@ function renderListingCard(l){
   var sc=l.status==='hidden'?'status-hidden':l.days_left<=3?'status-expired':'status-active';
   var st=l.status==='hidden'?'🙈 Скрыто':l.days_left<=3?'⏰ '+l.days_left+' дн.':'✅ '+l.days_left+' дн.';
   var pc=l.photo_count||0;
-  var photoRow='<div style="border-top:.5px solid var(--sep);margin-top:8px;padding-top:8px;">'
-    +'<div style="font-size:11px;color:var(--hint);margin-bottom:6px;">📸 Фото: '+pc+' шт</div>';
+  var photoRow='<div style="border-top:.5px solid var(--sep);margin-top:8px;padding-top:10px;display:flex;flex-direction:column;gap:7px;">'
+    +'<div style="font-size:12px;color:var(--hint);font-weight:500;">📸 Фото: '+pc+' шт</div>';
   if(pc<10){
-    photoRow+='<div style="display:flex;gap:7px;">'
-      +'<button class="la-btn" style="flex:1;color:var(--green)" onclick="act(\'photo_add\','+l.id+')">➕ Добавить фото</button>'
-      +'<button class="la-btn" style="flex:1;color:var(--orange)" onclick="act(\'photo_replace\','+l.id+')">✏️ Изменить фото</button>'
+    photoRow+='<div style="display:flex;gap:7px;margin-top:2px;">'
+      +'<button class="la-btn" style="flex:1;color:var(--green)" onclick="act(\'photo_add\','+l.id+')">➕ Добавить</button>'
+      +'<button class="la-btn" style="flex:1;color:var(--orange)" onclick="act(\'photo_replace\','+l.id+')">✏️ Изменить</button>'
       +'</div>';
   } else {
-    photoRow+='<button class="la-btn" style="width:100%;color:var(--orange)" onclick="act(\'photo_replace\','+l.id+')">✏️ Изменить фото</button>';
+    photoRow+='<button class="la-btn" style="width:100%;color:var(--orange);margin-top:2px;" onclick="act(\'photo_replace\','+l.id+')">✏️ Изменить фото</button>';
   }
   photoRow+='</div>';
   return '<div class="listing-card"><div class="listing-card-header"><div class="listing-title">'+l.make+' '+l.model+' '+l.year+'</div><div class="listing-meta">📍 '+l.city+' · 🛣 '+Number(l.mileage).toLocaleString('ru')+' км</div><div class="listing-price">€'+Number(l.price).toLocaleString('ru')+'</div><span class="listing-status '+sc+'">'+st+'</span></div><div class="listing-actions"><button class="la-btn" onclick="act(\'edit\','+l.id+')">✏️ Изменить</button><button class="la-btn" onclick="act(\''+(l.status==='hidden'?'unhide':'hide')+'\','+l.id+')">'+(l.status==='hidden'?'👁 Показать':'🙈 Скрыть')+'</button><button class="la-btn" onclick="act(\'extend\','+l.id+')">🔄 Продлить</button><button class="la-btn red" onclick="act(\'delete\','+l.id+')">🗑 Удалить</button></div>'+photoRow+'</div>';
