@@ -3,6 +3,7 @@ import logging
 import os
 import sys
 from datetime import datetime, time as dt_time
+from urllib.parse import quote
 
 import anthropic
 from dotenv import load_dotenv
@@ -264,7 +265,7 @@ def listing_caption(listing: dict) -> str:
         "",
         f"💶 <b>{listing['price']:,} €</b>",
         "",
-        f"📍 {listing['city']}",
+        f"📍 <a href=\"https://maps.google.com/maps?q={quote(listing['city'] + ', Netherlands')}\">{listing['city']}</a>",
         f"🛣 Пробег: {listing['mileage']:,} км",
         f"⛽ Топливо: {listing['fuel']}",
         f"⚙️ КПП: {listing['transmission']}",
