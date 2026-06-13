@@ -692,10 +692,8 @@ function openEditPanel(id){
     +'<input class="inp" id="ep-price" type="number" value="'+l.price+'">'
     +'<div class="filter-label" style="margin-top:14px;">Описание</div>'
     +'<textarea class="inp" id="ep-desc" rows="6">'+_origDescGlobal+'</textarea>'
-    +'<div style="display:flex;gap:8px;margin-top:8px;">'
-    +'<button class="btn btn-ai" style="flex:1" onclick="aiImproveEdit()" id="ep-ai-btn">✨ Улучшить с ИИ</button>'
-    +'<button class="btn btn-secondary" id="ep-revert-btn" style="display:none;flex:0 0 auto" onclick="revertDesc()">↩️</button>'
-    +'</div>'
+    +'<button class="btn btn-ai" style="margin-top:8px;" onclick="aiImproveEdit()" id="ep-ai-btn">✨ Улучшить с ИИ</button>'
+    +'<button class="link-btn" id="ep-revert-btn" style="display:none;margin-top:4px;" onclick="revertDesc()">↩️ Вернуть оригинал</button>'
     +'<button class="btn btn-primary" style="margin-top:10px;margin-bottom:30px;" onclick="saveEdit()">💾 Сохранить</button>'
     +'</div>';
   p.classList.add('open');
