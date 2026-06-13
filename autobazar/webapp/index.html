@@ -51,12 +51,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 #panel{position:fixed;inset:0;z-index:200;background:var(--bg);transform:translateX(100%);transition:transform .27s cubic-bezier(.4,0,.2,1);display:flex;flex-direction:column}
 #panel.open{transform:translateX(0)}
 #overlay.active{display:block!important}
-#edit-panel{transform:translateY(100%)}
+#edit-panel{transform:translateY(100%);display:flex;flex-direction:column}
 #edit-panel.open{transform:translateY(0)}
-#edit-panel .panel-header{display:flex;align-items:center;padding:14px 16px;border-bottom:.5px solid var(--sep);gap:8px}
-#edit-panel .panel-close{background:none;border:none;color:var(--hint);font-size:18px;cursor:pointer;margin-left:auto}
-#edit-panel .panel-title{font-size:17px;font-weight:600;flex:1}
-#edit-panel .panel-body{padding:16px 16px 40px}
+#edit-panel .ep-header{display:flex;align-items:center;padding:14px 16px;border-bottom:.5px solid var(--sep);flex-shrink:0}
+#edit-panel .ep-close{background:none;border:none;color:var(--hint);font-size:20px;cursor:pointer;line-height:1;padding:4px}
+#edit-panel .ep-title{font-size:17px;font-weight:600;flex:1}
+#edit-panel .ep-body{padding:16px;overflow-y:auto;flex:1}
+#edit-panel .ep-footer{padding:12px 16px;padding-bottom:max(16px,env(safe-area-inset-bottom));border-top:.5px solid var(--sep);flex-shrink:0;background:var(--bg2)}
+.revert-link{display:none;background:none;border:none;color:var(--hint);font-size:13px;cursor:pointer;font-family:inherit;padding:6px 0;text-align:left}
+.revert-link.visible{display:block}
 .panel-nav{display:flex;align-items:center;padding:12px 16px;border-bottom:.5px solid var(--sep);flex-shrink:0;gap:8px}
 .panel-back{background:none;border:none;color:var(--link);font-size:15px;cursor:pointer;padding:4px 8px 4px 0;font-family:inherit}
 .panel-title{font-size:17px;font-weight:600;flex:1}
@@ -686,15 +689,21 @@ function openEditPanel(id){
   _editListing=l;
   _origDescGlobal=l.description||'';
   var p=gi('edit-panel');
-  p.innerHTML='<div class="panel-header"><div class="panel-title">✏️ '+l.make+' '+l.model+'</div><button class="panel-close" onclick="closeEditPanel()">✕</button></div>'
-    +'<div class="panel-body">'
+  p.innerHTML=''
+    +'<div class="ep-header">'
+    +'<div class="ep-title">✏️ '+l.make+' '+l.model+'</div>'
+    +'<button class="ep-close" onclick="closeEditPanel()">✕</button>'
+    +'</div>'
+    +'<div class="ep-body">'
     +'<div class="filter-label">Цена (€)</div>'
     +'<input class="inp" id="ep-price" type="number" value="'+l.price+'">'
     +'<div class="filter-label" style="margin-top:14px;">Описание</div>'
-    +'<textarea class="inp" id="ep-desc" rows="6">'+_origDescGlobal+'</textarea>'
-    +'<button class="btn btn-ai" style="margin-top:8px;" onclick="aiImproveEdit()" id="ep-ai-btn">✨ Улучшить с ИИ</button>'
-    +'<button class="link-btn" id="ep-revert-btn" style="display:none;margin-top:4px;" onclick="revertDesc()">↩️ Вернуть оригинал</button>'
-    +'<button class="btn btn-primary" style="margin-top:10px;margin-bottom:30px;" onclick="saveEdit()">💾 Сохранить</button>'
+    +'<textarea class="inp" id="ep-desc" rows="7">'+_origDescGlobal+'</textarea>'
+    +'<button class="btn btn-ai" style="margin-top:10px;" onclick="aiImproveEdit()" id="ep-ai-btn">✨ Улучшить с ИИ</button>'
+    +'<button class="revert-link" id="ep-revert-btn" onclick="revertDesc()">↩ Вернуть оригинальное описание</button>'
+    +'</div>'
+    +'<div class="ep-footer">'
+    +'<button class="btn btn-primary" onclick="saveEdit()">💾 Сохранить изменения</button>'
     +'</div>';
   p.classList.add('open');
   gi('overlay').classList.add('active');
@@ -712,7 +721,7 @@ function aiImproveEdit(){
       if(d.improved){
         gi('ep-desc').value=d.improved;
         var rb=gi('ep-revert-btn');
-        if(rb)rb.style.display='';
+        if(rb)rb.classList.add('visible');
       }
     })
     .catch(function(){tg.showAlert('Ошибка ИИ');})
@@ -721,7 +730,7 @@ function aiImproveEdit(){
 function revertDesc(){
   gi('ep-desc').value=_origDescGlobal;
   var rb=gi('ep-revert-btn');
-  if(rb)rb.style.display='none';
+  if(rb)rb.classList.remove('visible');
 }
 function saveEdit(){
   if(!_editListing)return;
