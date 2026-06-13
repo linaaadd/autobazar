@@ -687,9 +687,14 @@ async def _send_photo_ack(context: ContextTypes.DEFAULT_TYPE):
     data = context.job.data
     user_data = context.application.user_data.get(data["user_id"], {})
     count = len(user_data.get("photos", []))
+    rejected = user_data.get("rejected_photos", 0)
+    user_data["rejected_photos"] = 0
+    text = f"📸 Добавлено: {count}/10"
+    if rejected:
+        text += f"\n⚠️ Отклонено: {rejected} фото — авто не распознано"
     await context.bot.send_message(
         chat_id=data["chat_id"],
-        text=f"📸 Добавлено {count}/10",
+        text=text,
         reply_markup=photos_keyboard(count),
     )
 
@@ -704,28 +709,19 @@ async def collect_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ASK_PHOTOS
     file_id = update.message.photo[-1].file_id
     is_car = await _validate_photo_is_car(context.bot, file_id)
-    if not is_car:
-        await update.message.reply_text(
-            "⚠️ На фото не видно автомобиля. Пожалуйста, загрузите фото вашего авто.",
-            reply_markup=photos_keyboard(len(photos)),
-        )
-        return ASK_PHOTOS
-    photos.append(file_id)
-    if update.message.media_group_id:
-        # Debounce: cancel pending ack, schedule one reply for the whole group
-        for job in context.job_queue.get_jobs_by_name(f"photo_ack_{update.effective_user.id}"):
-            job.schedule_removal()
-        context.job_queue.run_once(
-            _send_photo_ack,
-            when=1.5,
-            data={"chat_id": update.effective_chat.id, "user_id": update.effective_user.id},
-            name=f"photo_ack_{update.effective_user.id}",
-        )
+    if is_car:
+        photos.append(file_id)
     else:
-        await update.message.reply_text(
-            f"📸 Добавлено {len(photos)}/10",
-            reply_markup=photos_keyboard(len(photos)),
-        )
+        context.user_data["rejected_photos"] = context.user_data.get("rejected_photos", 0) + 1
+    # Always debounce — one summary after all photos processed
+    for job in context.job_queue.get_jobs_by_name(f"photo_ack_{update.effective_user.id}"):
+        job.schedule_removal()
+    context.job_queue.run_once(
+        _send_photo_ack,
+        when=2.0,
+        data={"chat_id": update.effective_chat.id, "user_id": update.effective_user.id},
+        name=f"photo_ack_{update.effective_user.id}",
+    )
     return ASK_PHOTOS
 
 
