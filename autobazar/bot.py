@@ -869,7 +869,8 @@ async def _api_ai_improve(request: aio_web.Request) -> aio_web.Response:
             messages=[{"role": "user", "content":
                 f"Улучши это объявление о продаже автомобиля: исправь грамматику, "
                 f"сделай текст чётким и привлекательным для покупателя. "
-                f"Верни ТОЛЬКО улучшенный текст без объяснений.\n\n{text}"}],
+                f"Верни ТОЛЬКО улучшенный текст без объяснений. "
+                f"Максимум 700 символов.\n\n{text}"}],
         )
         improved = resp.content[0].text.strip()
     except Exception as e:

@@ -556,12 +556,17 @@ var PDEFS={
   'p_desc':{title:'Описание',
     reset:function(){pv.description='';updP('desc','pv-desc','Написать');},
     build:function(){
-      return '<textarea class="inp" id="pi" rows="8" placeholder="Расскажите о состоянии, комплектации, истории обслуживания…">'+pv.description+'</textarea>'
-        +'<div style="margin-top:10px;font-size:12px;color:var(--hint);margin-bottom:6px;">ИИ улучшит грамматику, стиль и сделает объявление привлекательнее</div>'
+      var cur=pv.description||'';
+      var col=cur.length>700?'var(--red)':cur.length>600?'var(--orange)':'var(--hint)';
+      return '<textarea class="inp" id="pi" rows="8" placeholder="Расскажите о состоянии, комплектации, истории обслуживания…" maxlength="700" oninput="updDescCounter(this)">'+cur+'</textarea>'
+        +'<div id="desc-counter" style="text-align:right;font-size:12px;color:'+col+';margin-top:4px;">'+cur.length+'/700</div>'
+        +'<div style="margin-top:8px;font-size:12px;color:var(--hint);margin-bottom:6px;">ИИ улучшит грамматику, стиль и сделает объявление привлекательнее</div>'
         +'<button class="btn btn-ai" onclick="aiImprove()">✨ Улучшить с ИИ</button>';
     },
     apply:function(){
-      pv.description=(gi('pi').value||'').trim();
+      var val=(gi('pi').value||'').trim();
+      if(val.length>700){tg.showAlert('Описание слишком длинное (максимум 700 символов).');return;}
+      pv.description=val;
       updP('desc','pv-desc',pv.description?pv.description.slice(0,32)+(pv.description.length>32?'…':''):'Написать');
     }
   },
@@ -602,6 +607,13 @@ function pp1c(key,val,el){
   el.classList.add('sel');applyPanel();
 }
 
+function updDescCounter(ta){
+  var el=gi('desc-counter');if(!el)return;
+  var n=ta.value.length;
+  el.textContent=n+'/700';
+  el.style.color=n>700?'var(--red)':n>600?'var(--orange)':'var(--hint)';
+}
+
 function aiImprove(){
   var txt=(gi('pi').value||'').trim();
   if(txt.length<10){tg.showAlert('Сначала напишите описание.');return;}
@@ -610,7 +622,11 @@ function aiImprove(){
   fetch('/api/ai_improve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:txt})})
     .then(function(r){return r.json();})
     .then(function(d){
-      if(d.improved){gi('pi').value=d.improved;pv.description=d.improved;tg.showAlert('✅ Описание улучшено!');}
+      if(d.improved){
+        var txt=d.improved.length>700?d.improved.slice(0,699)+'…':d.improved;
+        gi('pi').value=txt;pv.description=txt;updDescCounter(gi('pi'));
+        tg.showAlert('✅ Описание улучшено!');
+      }
     })
     .catch(function(){tg.showAlert('Ошибка ИИ, попробуйте ещё раз.');})
     .finally(function(){if(btn){btn.disabled=false;btn.textContent='✨ Улучшить с ИИ';}});
@@ -650,6 +666,7 @@ function doPublish(){
   var req=[['make','Марка'],['model','Модель'],['year','Год'],['mileage','Пробег'],['price','Цена'],['fuel','Топливо'],['transmission','Коробка'],['city','Город'],['description','Описание']];
   for(var i=0;i<req.length;i++){if(!pv[req[i][0]]&&pv[req[i][0]]!==0){tg.showAlert('Заполните: '+req[i][1]);return;}}
   if((pv.description||'').length<15){tg.showAlert('Описание слишком короткое.');return;}
+  if((pv.description||'').length>700){tg.showAlert('Описание слишком длинное (максимум 700 символов).');return;}
   tg.sendData(JSON.stringify({action:'publish',make:pv.make,model:pv.model,year:+pv.year,mileage:+pv.mileage,price:+pv.price,fuel:pv.fuel,transmission:pv.transmission,engine:pv.engine||null,turbo:pv.turbo,city:pv.city,description:pv.description,phone:pv.phone||null}));
 }
 
