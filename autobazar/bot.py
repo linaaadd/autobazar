@@ -228,11 +228,17 @@ async def post_to_channel(context, listing: dict) -> tuple[list[int], list[str]]
 
 
 async def delete_from_channel(context, message_ids: list):
-    for mid in message_ids:
+    flat = []
+    for item in message_ids:
+        if isinstance(item, int):
+            flat.append(item)
+        elif isinstance(item, list):
+            flat.extend(x for x in item if isinstance(x, int))
+    for mid in flat:
         try:
             await context.bot.delete_message(chat_id=CHANNEL_ID, message_id=mid)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"delete_message {mid} failed: {e}")
 
 
 # ====== /start ======
@@ -1020,30 +1026,44 @@ async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
         if action == "hide":
             msg_ids = json.loads(listing.get("channel_message_ids") or "[]")
             logger.info(f"Hide #{listing_id}, channel_message_ids={msg_ids}")
-            for mid in msg_ids:
-                try:
-                    await context.bot.delete_message(chat_id=CHANNEL_ID, message_id=mid)
-                    logger.info(f"Deleted message {mid} from channel")
-                except Exception as e:
-                    logger.error(f"Failed to delete message {mid}: {e}")
+            await delete_from_channel(context, msg_ids)
             await hide_listing(listing_id)
             await update_listing_channel_msgs(listing_id, [])
             await update.message.reply_text("🙈 Объявление скрыто.", reply_markup=kb)
 
         elif action == "unhide":
             await unhide_listing(listing_id)
-            await update.message.reply_text("⏳ Публикую в канал…", reply_markup=kb)
             listing["status"] = "active"
-            async def _republish():
-                try:
-                    msg_ids, wm_ids = await post_to_channel(context, listing)
-                    await update_listing_channel_msgs(listing_id, msg_ids)
-                    if wm_ids:
-                        await update_listing_watermarked_photos(listing_id, wm_ids)
-                    await context.bot.send_message(update.effective_chat.id, "👁 Объявление опубликовано в канал.")
-                except Exception as e:
-                    logger.error(f"republish error: {e}")
-            asyncio.create_task(_republish())
+            cached = json.loads(listing.get("watermarked_photo_ids") or "[]")
+            if cached:
+                await update.message.reply_text("⏳ Публикую в канал…", reply_markup=kb)
+                async def _republish_cached():
+                    try:
+                        caption = listing_caption(listing)
+                        if len(cached) == 1:
+                            msg = await context.bot.send_photo(chat_id=CHANNEL_ID, photo=cached[0], caption=caption)
+                            msg_ids = [msg.message_id]
+                        else:
+                            media = [InputMediaPhoto(cached[0], caption=caption)] + [InputMediaPhoto(f) for f in cached[1:]]
+                            msgs = await context.bot.send_media_group(chat_id=CHANNEL_ID, media=media)
+                            msg_ids = [m.message_id for m in msgs]
+                        await update_listing_channel_msgs(listing_id, msg_ids)
+                        await context.bot.send_message(update.effective_chat.id, "👁 Объявление опубликовано в канал.")
+                    except Exception as e:
+                        logger.error(f"republish cached error: {e}")
+                asyncio.create_task(_republish_cached())
+            else:
+                await update.message.reply_text("⏳ Публикую в канал…", reply_markup=kb)
+                async def _republish():
+                    try:
+                        msg_ids, wm_ids = await post_to_channel(context, listing)
+                        await update_listing_channel_msgs(listing_id, msg_ids)
+                        if wm_ids:
+                            await update_listing_watermarked_photos(listing_id, wm_ids)
+                        await context.bot.send_message(update.effective_chat.id, "👁 Объявление опубликовано в канал.")
+                    except Exception as e:
+                        logger.error(f"republish error: {e}")
+                asyncio.create_task(_republish())
 
         elif action == "extend":
             await extend_listing(listing_id)
@@ -1052,12 +1072,7 @@ async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
         elif action == "delete":
             msg_ids = json.loads(listing.get("channel_message_ids") or "[]")
             logger.info(f"Удаление объявления #{listing_id}, channel_message_ids={msg_ids}")
-            for mid in msg_ids:
-                try:
-                    await context.bot.delete_message(chat_id=CHANNEL_ID, message_id=mid)
-                    logger.info(f"Удалено сообщение {mid} из канала {CHANNEL_ID}")
-                except Exception as e:
-                    logger.error(f"Не удалось удалить сообщение {mid} из канала: {e}")
+            await delete_from_channel(context, msg_ids)
             await delete_listing(listing_id)
             await update.message.reply_text("🗑 Объявление удалено.", reply_markup=kb)
 
