@@ -1368,15 +1368,19 @@ async def edit_description_handler(update: Update, context: ContextTypes.DEFAULT
 async def edit_desc_confirm_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    await query.edit_message_text("⏳ Публикую обновлённое объявление...")
     listing_id = context.user_data.get("editing_listing_id")
     text = context.user_data.get("edit_new_desc", "")
     context.user_data["edit_original_desc"] = text
-    await update_listing_field(listing_id, "description", text)
-    listing = await get_listing(listing_id)
-    old_ids = json.loads(listing.get("channel_message_ids") or "[]")
-    await delete_from_channel(context, old_ids)
-    msg_ids = await post_to_channel(context, listing)
-    await update_listing_channel_msgs(listing_id, msg_ids)
+    try:
+        await update_listing_field(listing_id, "description", text)
+        listing = await get_listing(listing_id)
+        old_ids = json.loads(listing.get("channel_message_ids") or "[]")
+        await delete_from_channel(context, old_ids)
+        msg_ids = await post_to_channel(context, listing)
+        await update_listing_channel_msgs(listing_id, msg_ids)
+    except Exception as e:
+        logger.error(f"edit_desc_confirm error: {e}")
     await query.edit_message_text(
         "✅ Описание обновлено и объявление переопубликовано.\n\n"
         f"📝 <i>{text}</i>",
