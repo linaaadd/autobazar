@@ -886,7 +886,12 @@ function showTab(name){
   if(name==='admin')renderAdminListings();
 }
 
-if(_isAdminMode){var at=gi('tab-admin');if(at)at.style.display='';}
+if(_isAdminMode){
+  gi('tab-admin').style.display='';
+  gi('tab-search').style.display='none';
+  gi('tab-publish').style.display='none';
+  gi('tab-my').style.display='none';
+}
 showTab(_urlParams.get('tab')||'search');
 </script>
 </body>
