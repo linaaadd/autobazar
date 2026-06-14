@@ -264,7 +264,27 @@ async def delete_from_channel(context, message_ids: list):
             logger.error(f"delete_message {mid} failed: {e}")
 
 
-# ====== /start ======
+# ====== /start · /help ======
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    kb = webapp_keyboard(update.effective_user.id)
+    await update.message.reply_text(
+        "<b>AutoBazar NL — помощь</b>\n\n"
+        "<b>Как подать объявление:</b>\n"
+        "Нажми «🚗 Подать объявление» → заполни форму → отправь боту → пришли фото (до 10 шт.) → нажми «Фото готовы».\n"
+        "Объявление появится в канале @autobazar_nederland.\n\n"
+        "<b>Как найти авто:</b>\n"
+        "Нажми «🔍 Поиск авто» → выбери фильтры → нажми «Найти».\n\n"
+        "<b>Управление объявлениями:</b>\n"
+        "«📋 Мои авто» → можно изменить цену/описание/фото, скрыть, продлить или удалить.\n\n"
+        "<b>Срок размещения:</b> 30 дней. За 4 дня до истечения придёт напоминание.\n\n"
+        "<b>Команды:</b>\n"
+        "/start — главное меню\n"
+        "/mylistings — мои объявления",
+        parse_mode="HTML",
+        reply_markup=kb,
+    )
+
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
@@ -1426,6 +1446,7 @@ def main():
     )
 
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("mylistings", my_listings))
     app.add_handler(CommandHandler("welcome", post_welcome))
     app.add_handler(CommandHandler("mod", mod_menu))
