@@ -1,6 +1,97 @@
 # 🚗 AutoBazar NL — Telegram Bot
 
-Telegram-бот маркетплейс для покупки и продажи автомобилей в Нидерландах.
+> Telegram marketplace bot for buying and selling cars in the Netherlands.
+
+**Bot:** [@autobazar_nl_bot](https://t.me/autobazar_nl_bot)  
+**Channel:** [@autobazar_nederland](https://t.me/autobazar_nederland)
+
+---
+
+## Features
+
+### For users
+- 📝 Post listings via Telegram Mini App (make, model, year, mileage, up to 10 photos)
+- 🤖 AI photo validation — only real cars accepted (Claude Haiku)
+- ✨ One-click AI description improvement
+- 🖼 Automatic `@autobazar_nederland` watermark on photos
+- 🔍 Search by make, model, year, price, city
+- 📋 Manage your listings: hide / show / extend / delete / edit photos & description
+- ⏰ Expiry reminders 1–4 days before, auto-removal after 30 days
+
+### For moderators
+- 🛡 Moderator panel via `/mod` — private WebApp for the owner only
+- 👁 View all listings with status filter (active / hidden / expired)
+- ⚙️ Full control over any listing: edit text/price/photos, hide, extend, delete
+- 👤 Owner info displayed (username, phone, created date)
+
+### Automation
+- 📆 Daily repost of all active listings to channel
+- 🧹 Auto-cleanup of expired listings
+
+---
+
+## Tech Stack
+
+- [python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot) v22+
+- [aiohttp](https://docs.aiohttp.org/) — web server for Mini App
+- [aiosqlite](https://github.com/omnilib/aiosqlite) — async SQLite
+- [Pillow](https://pillow.readthedocs.io/) — photo watermarking
+- [Anthropic API](https://docs.anthropic.com/) — Claude Haiku for AI features
+
+---
+
+## Project Structure
+
+```
+autobazar/
+├── bot.py           # main bot + web server (aiohttp)
+├── database.py      # SQLite via aiosqlite
+├── requirements.txt
+├── railway.toml     # Railway deployment config
+├── .env.example     # environment variables template
+└── webapp/
+    └── index.html   # Telegram Mini App (user + moderator)
+```
+
+---
+
+## Deploy on Railway
+
+1. Create a project on [railway.app](https://railway.app)
+2. Set Root Directory: `autobazar`
+3. Add environment variables (see below)
+4. Railway runs `python bot.py` automatically
+
+## Environment Variables
+
+```env
+TELEGRAM_TOKEN=       # token from @BotFather
+ANTHROPIC_API_KEY=    # Anthropic API key
+CHANNEL_ID=           # @username or -100... of the channel
+WEBAPP_URL=           # public Railway service URL
+ADMIN_ID=             # owner's numeric Telegram ID (for /mod panel)
+```
+
+> `ADMIN_ID` is optional. Without it, the moderator panel is disabled.
+
+---
+
+## Local Development
+
+```bash
+cd autobazar
+pip install -r requirements.txt
+cp .env.example .env  # fill in values
+python bot.py
+```
+
+---
+
+---
+
+# 🚗 AutoBazar NL — Telegram Бот
+
+> Telegram-бот маркетплейс для покупки и продажи автомобилей в Нидерландах.
 
 **Бот:** [@autobazar_nl_bot](https://t.me/autobazar_nl_bot)  
 **Канал:** [@autobazar_nederland](https://t.me/autobazar_nederland)
@@ -15,7 +106,7 @@ Telegram-бот маркетплейс для покупки и продажи �
 - ✨ AI-улучшение описания одной кнопкой
 - 🖼 Автоматическая ватермарка `@autobazar_nederland` на фото
 - 🔍 Поиск по марке, модели, году, цене, городу
-- 📋 Управление своими объявлениями: скрыть / показать / продлить / удалить / изменить фото и описание
+- 📋 Управление объявлениями: скрыть / показать / продлить / удалить / изменить фото и описание
 - ⏰ Напоминания об истечении за 1–4 дня, автоудаление через 30 дней
 
 ### Для модератора
@@ -27,6 +118,16 @@ Telegram-бот маркетплейс для покупки и продажи �
 ### Автоматика
 - 📆 Ежедневный репост всех активных объявлений в канал
 - 🧹 Автоочистка истёкших объявлений
+
+---
+
+## Стек
+
+- [python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot) v22+
+- [aiohttp](https://docs.aiohttp.org/) — веб-сервер для Mini App
+- [aiosqlite](https://github.com/omnilib/aiosqlite) — асинхронная SQLite
+- [Pillow](https://pillow.readthedocs.io/) — ватермарка на фото
+- [Anthropic API](https://docs.anthropic.com/) — Claude Haiku для AI-функций
 
 ---
 
@@ -74,13 +175,3 @@ pip install -r requirements.txt
 cp .env.example .env  # заполнить значения
 python bot.py
 ```
-
----
-
-## Стек
-
-- [python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot) v22+
-- [aiohttp](https://docs.aiohttp.org/) — веб-сервер для Mini App
-- [aiosqlite](https://github.com/omnilib/aiosqlite) — асинхронная SQLite
-- [Pillow](https://pillow.readthedocs.io/) — ватермарка на фото
-- [Anthropic API](https://docs.anthropic.com/) — Claude Haiku для AI-функций
