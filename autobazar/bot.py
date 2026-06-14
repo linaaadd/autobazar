@@ -5,6 +5,7 @@ import io
 import json
 import logging
 import os
+import re
 import sys
 from datetime import datetime, time as dt_time
 from urllib.parse import quote
@@ -60,6 +61,14 @@ _missing = [v for v in ("TELEGRAM_TOKEN", "ANTHROPIC_API_KEY", "CHANNEL_ID") if 
 if _missing:
     logger.critical(f"Отсутствуют переменные окружения: {', '.join(_missing)}")
     sys.exit(1)
+
+# ====== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ======
+def _strip_md(text: str) -> str:
+    text = re.sub(r'\*\*(.+?)\*\*', r'\1', text, flags=re.DOTALL)
+    text = re.sub(r'\*(.+?)\*', r'\1', text, flags=re.DOTALL)
+    text = re.sub(r'__(.+?)__', r'\1', text, flags=re.DOTALL)
+    text = re.sub(r'_(.+?)_', r'\1', text, flags=re.DOTALL)
+    return text.strip()
 
 # ====== СОСТОЯНИЯ ДИАЛОГА: редактирование ======
 EDIT_CHOOSE_FIELD, EDIT_PRICE, EDIT_DESCRIPTION, EDIT_AI_CONFIRM, EDIT_DESC_CONFIRM = range(30, 35)
@@ -619,7 +628,7 @@ async def edit_desc_ai_handler(update: Update, context: ContextTypes.DEFAULT_TYP
                 "Напиши только текст описания (2–4 предложения). Без заголовков, без цены, без контактов."
             )}],
         )
-        improved = response.content[0].text.strip()
+        improved = _strip_md(response.content[0].text)
         context.user_data["edit_new_desc"] = improved
     except Exception as e:
         logger.error(f"AI edit error: {e}")
@@ -895,7 +904,7 @@ async def _api_ai_improve(request: aio_web.Request) -> aio_web.Response:
                 f"Верни ТОЛЬКО улучшенный текст без объяснений. "
                 f"Максимум 700 символов.\n\n{text}"}],
         )
-        improved = resp.content[0].text.strip()
+        improved = _strip_md(resp.content[0].text)
     except Exception as e:
         logger.error(f"AI improve error: {e}")
         return _cors(aio_web.Response(status=500, text="ai error"))
