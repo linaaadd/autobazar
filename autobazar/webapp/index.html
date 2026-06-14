@@ -810,11 +810,22 @@ function renderAdminCard(l){
   var owner='<div style="font-size:12px;color:var(--hint);margin-bottom:4px;">👤 '+(l.username?'@'+l.username:'#'+l.user_id)+(l.phone?' · 📞 '+l.phone:'')+'</div>';
   var created='<div style="font-size:11px;color:var(--hint);margin-top:2px;">📅 '+l.created_at+'</div>';
   var pc=l.photo_count||0;
+  var photoRow='<div style="border-top:.5px solid var(--sep);margin-top:8px;padding:10px 14px 12px;display:flex;flex-direction:column;gap:7px;">'
+    +'<div style="font-size:12px;color:var(--hint);font-weight:500;">📸 Фото: '+pc+' шт</div>';
+  if(pc<10){
+    photoRow+='<div style="display:flex;gap:7px;margin-top:2px;">'
+      +'<button class="la-btn" style="flex:1;color:var(--green)" onclick="act(\'photo_add\','+l.id+')">➕ Добавить</button>'
+      +'<button class="la-btn" style="flex:1;color:var(--orange)" onclick="act(\'photo_replace\','+l.id+')">✏️ Заменить</button>'
+      +'</div>';
+  } else {
+    photoRow+='<button class="la-btn" style="width:100%;color:var(--orange);margin-top:2px;" onclick="act(\'photo_replace\','+l.id+')">✏️ Заменить фото</button>';
+  }
+  photoRow+='</div>';
   return '<div class="listing-card">'
     +'<div class="listing-card-header">'
     +owner
     +'<div class="listing-title">'+l.make+' '+l.model+' '+l.year+'</div>'
-    +'<div class="listing-meta">📍 '+l.city+' · 🛣 '+Number(l.mileage).toLocaleString('ru')+' км · 📸 '+pc+'</div>'
+    +'<div class="listing-meta">📍 '+l.city+' · 🛣 '+Number(l.mileage).toLocaleString('ru')+' км</div>'
     +'<div class="listing-price">€'+Number(l.price).toLocaleString('ru')+'</div>'
     +'<span class="listing-status '+sc+'">'+st+'</span>'
     +created
@@ -825,6 +836,7 @@ function renderAdminCard(l){
     +'<button class="la-btn" onclick="act(\'extend\','+l.id+')">🔄 Продлить</button>'
     +'<button class="la-btn red" onclick="act(\'delete\','+l.id+')">🗑 Удалить</button>'
     +'</div>'
+    +photoRow
     +'</div>';
 }
 
