@@ -31,6 +31,7 @@ from database import (
     create_listing,
     delete_listing,
     extend_listing,
+    get_all_listings,
     get_expired_listings,
     get_listing,
     get_listings_expiring_soon,
@@ -53,6 +54,7 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 CHANNEL_ID = os.getenv("CHANNEL_ID")
 WEBAPP_URL = os.getenv("WEBAPP_URL", "").rstrip("/")
 WEBAPP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "webapp")
+ADMIN_ID = int(os.getenv("ADMIN_ID", 0))
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -915,6 +917,48 @@ async def _api_ai_improve(request: aio_web.Request) -> aio_web.Response:
     ))
 
 
+async def _api_admin_listings(request: aio_web.Request) -> aio_web.Response:
+    """GET /api/admin/listings?token=...&status=...  — все объявления для модератора."""
+    token = request.rel_url.query.get("token", "")
+    if token != TELEGRAM_TOKEN:
+        return _cors(aio_web.Response(status=403, text="forbidden"))
+    status_filter = request.rel_url.query.get("status", "")
+    rows = await get_all_listings(status_filter or None)
+    from datetime import date as _date
+    listings = []
+    for r in rows:
+        expires = r.get("expires_at", "")
+        days_left = 0
+        if expires:
+            try:
+                exp_date = _date.fromisoformat(str(expires)[:10])
+                days_left = max(0, (exp_date - _date.today()).days)
+            except Exception:
+                pass
+        photo_ids = json.loads(r.get("photo_ids") or "[]")
+        listings.append({
+            "id":          r["id"],
+            "user_id":     r.get("user_id"),
+            "username":    r.get("username") or "",
+            "phone":       r.get("phone") or "",
+            "make":        r.get("make", ""),
+            "model":       r.get("model", ""),
+            "year":        r.get("year", ""),
+            "price":       r.get("price", 0),
+            "mileage":     r.get("mileage", 0),
+            "city":        r.get("city", ""),
+            "status":      r.get("status", "active"),
+            "days_left":   days_left,
+            "description": r.get("description", ""),
+            "photo_count": len(photo_ids),
+            "created_at":  str(r.get("created_at", ""))[:10],
+        })
+    return _cors(aio_web.Response(
+        content_type="application/json",
+        text=json.dumps(listings, ensure_ascii=False),
+    ))
+
+
 # ====== TELEGRAM MINI APP HANDLERS ======
 
 _WEBAPP_AWAIT_PHOTOS = "webapp_await_photos"
@@ -1007,7 +1051,7 @@ async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
     elif action in ("photo_add", "photo_replace"):
         listing_id = data.get("id")
         listing = await get_listing(listing_id) if listing_id else None
-        if not listing or listing.get("user_id") != update.effective_user.id:
+        if not listing or (listing.get("user_id") != update.effective_user.id and update.effective_user.id != ADMIN_ID):
             await update.message.reply_text("⚠️ Объявление не найдено.", reply_markup=kb)
             return
         existing = json.loads(listing.get("photo_ids") or "[]")
@@ -1042,7 +1086,7 @@ async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await update.message.reply_text("⚠️ ID объявления не указан.")
             return
         listing = await get_listing(listing_id)
-        if not listing or listing.get("user_id") != update.effective_user.id:
+        if not listing or (listing.get("user_id") != update.effective_user.id and update.effective_user.id != ADMIN_ID):
             await update.message.reply_text("⚠️ Объявление не найдено.", reply_markup=kb)
             return
 
@@ -1112,7 +1156,7 @@ async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
     elif action == "edit_save":
         listing_id = data.get("id")
         listing = await get_listing(listing_id) if listing_id else None
-        if not listing or listing.get("user_id") != update.effective_user.id:
+        if not listing or (listing.get("user_id") != update.effective_user.id and update.effective_user.id != ADMIN_ID):
             await update.message.reply_text("⚠️ Объявление не найдено.", reply_markup=kb)
             return
         new_price = data.get("price")
@@ -1212,7 +1256,7 @@ async def webapp_photos_done(update: Update, context: ContextTypes.DEFAULT_TYPE)
     # ── Обновление фото существующего объявления ──
     if photo_mode in ("add", "replace") and photo_listing_id:
         listing = await get_listing(photo_listing_id)
-        if not listing or listing.get("user_id") != update.effective_user.id:
+        if not listing or (listing.get("user_id") != update.effective_user.id and update.effective_user.id != ADMIN_ID):
             await query.edit_message_text("⚠️ Объявление не найдено.")
             return
         if photo_mode == "add":
@@ -1307,6 +1351,19 @@ async def webapp_photos_cancel(update: Update, context: ContextTypes.DEFAULT_TYP
     await query.edit_message_text("❌ Отменено.", reply_markup=None)
 
 
+async def mod_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not ADMIN_ID or update.effective_user.id != ADMIN_ID:
+        return
+    url = f"{WEBAPP_URL}/webapp?tab=admin&token={TELEGRAM_TOKEN}"
+    await update.message.reply_text(
+        "🛡 Панель модератора",
+        reply_markup=ReplyKeyboardMarkup(
+            [[KeyboardButton("🛡 Все объявления", web_app=WebAppInfo(url=url))]],
+            resize_keyboard=True,
+        ),
+    )
+
+
 # ====== ЗАПУСК ======
 
 async def post_init(app: Application):
@@ -1326,6 +1383,7 @@ async def post_init(app: Application):
     web_app.router.add_get("/webapp/", _serve_webapp)
     web_app.router.add_get("/api/listings", _api_listings)
     web_app.router.add_post("/api/ai_improve", _api_ai_improve)
+    web_app.router.add_get("/api/admin/listings", _api_admin_listings)
     web_app.router.add_route("OPTIONS", "/api/listings", _api_listings)
     web_app.router.add_route("OPTIONS", "/api/ai_improve", _api_ai_improve)
     runner = aio_web.AppRunner(web_app)
@@ -1366,6 +1424,7 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("mylistings", my_listings))
     app.add_handler(CommandHandler("welcome", post_welcome))
+    app.add_handler(CommandHandler("mod", mod_menu))
     app.add_handler(edit_conv)
     app.add_handler(CallbackQueryHandler(my_listings, pattern="^my_listings$"))
     app.add_handler(CallbackQueryHandler(extend_listing_handler, pattern=r"^extend_\d+$"))

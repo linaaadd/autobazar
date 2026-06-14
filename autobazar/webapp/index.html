@@ -152,6 +152,17 @@ textarea.inp{resize:none;line-height:1.5}
   <div id="my-list"></div>
 </div>
 
+<div class="screen" id="screen-admin">
+  <div class="screen-header">🛡 Все объявления</div>
+  <div id="admin-filter" style="display:flex;gap:8px;padding:0 12px 10px;overflow-x:auto;flex-wrap:nowrap">
+    <button class="chip sel" id="afilter-all" onclick="setAdminFilter('')">Все</button>
+    <button class="chip" id="afilter-active" onclick="setAdminFilter('active')">Активные</button>
+    <button class="chip" id="afilter-hidden" onclick="setAdminFilter('hidden')">Скрытые</button>
+    <button class="chip" id="afilter-expired" onclick="setAdminFilter('expired')">Истёкшие</button>
+  </div>
+  <div id="admin-list"></div>
+</div>
+
 <div id="overlay" onclick="closePanel();closeEditPanel();" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99"></div>
 <div id="edit-panel" style="position:fixed;bottom:0;left:0;right:0;max-height:90vh;background:var(--bg2);border-radius:16px 16px 0 0;z-index:150;transition:transform .3s;"></div>
 
@@ -177,6 +188,10 @@ textarea.inp{resize:none;line-height:1.5}
   <button class="tab" id="tab-my" onclick="showTab('my')">
     <svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/></svg>
     Мои авто
+  </button>
+  <button class="tab" id="tab-admin" onclick="showTab('admin')" style="display:none">
+    <svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 4l5 2.18V11c0 3.5-2.33 6.79-5 7.93-2.67-1.14-5-4.43-5-7.93V7.18L12 5z"/></svg>
+    Модерация
   </button>
 </div>
 
@@ -717,12 +732,22 @@ function renderMyListings(){
 }
 var _editListing=null;
 var _myListingsCache=[];
+var _adminListingsCache=[];
+var _adminFilter='';
+var _urlParams=new URLSearchParams(location.search);
+var _isAdminMode=_urlParams.get('tab')==='admin';
+var _adminToken=_urlParams.get('token')||'';
+
+function _listingById(id){
+  return _myListingsCache.find(function(x){return x.id==id;})
+    ||_adminListingsCache.find(function(x){return x.id==id;});
+}
 function act(a,id){
   if(a==='edit'){openEditPanel(id);return;}
   tg.sendData(JSON.stringify({action:a,id:id}));
 }
 function openEditPanel(id){
-  var l=_myListingsCache.find(function(x){return x.id==id;});
+  var l=_listingById(id);
   if(!l){tg.showAlert('Не найдено');return;}
   _editListing=l;
   _origDescGlobal=l.description||'';
@@ -779,14 +804,78 @@ function saveEdit(){
   tg.sendData(JSON.stringify({action:'edit_save',id:_editListing.id,price:+price,description:desc}));
 }
 
+function renderAdminCard(l){
+  var sc=l.status==='hidden'?'status-hidden':l.status==='expired'||l.days_left<=0?'status-expired':'status-active';
+  var st=l.status==='hidden'?'🙈 Скрыто':l.status==='expired'||l.days_left<=0?'⏰ Истёкло':'✅ '+l.days_left+' дн.';
+  var owner='<div style="font-size:12px;color:var(--hint);margin-bottom:4px;">👤 '+(l.username?'@'+l.username:'#'+l.user_id)+(l.phone?' · 📞 '+l.phone:'')+'</div>';
+  var created='<div style="font-size:11px;color:var(--hint);margin-top:2px;">📅 '+l.created_at+'</div>';
+  var pc=l.photo_count||0;
+  return '<div class="listing-card">'
+    +'<div class="listing-card-header">'
+    +owner
+    +'<div class="listing-title">'+l.make+' '+l.model+' '+l.year+'</div>'
+    +'<div class="listing-meta">📍 '+l.city+' · 🛣 '+Number(l.mileage).toLocaleString('ru')+' км · 📸 '+pc+'</div>'
+    +'<div class="listing-price">€'+Number(l.price).toLocaleString('ru')+'</div>'
+    +'<span class="listing-status '+sc+'">'+st+'</span>'
+    +created
+    +'</div>'
+    +'<div class="listing-actions">'
+    +'<button class="la-btn" onclick="act(\'edit\','+l.id+')">✏️ Изменить</button>'
+    +'<button class="la-btn" onclick="act(\''+(l.status==='hidden'?'unhide':'hide')+'\','+l.id+')">'+(l.status==='hidden'?'👁 Показать':'🙈 Скрыть')+'</button>'
+    +'<button class="la-btn" onclick="act(\'extend\','+l.id+')">🔄 Продлить</button>'
+    +'<button class="la-btn red" onclick="act(\'delete\','+l.id+')">🗑 Удалить</button>'
+    +'</div>'
+    +'</div>';
+}
+
+function renderAdminListings(){
+  var el=gi('admin-list');
+  el.innerHTML='<div style="text-align:center;padding:30px;color:var(--hint);">⏳ Загрузка…</div>';
+  if(!_adminToken){
+    el.innerHTML='<div class="empty"><div class="empty-ico">🔒</div><div class="empty-title">Нет доступа</div><div class="empty-sub">Откройте через /mod в боте</div></div>';
+    return;
+  }
+  fetch('/api/admin/listings?token='+encodeURIComponent(_adminToken)+(_adminFilter?'&status='+_adminFilter:''))
+    .then(function(r){
+      if(r.status===403){throw new Error('forbidden');}
+      return r.json();
+    })
+    .then(function(data){
+      _adminListingsCache=data;
+      if(!data.length){
+        el.innerHTML='<div class="empty"><div class="empty-ico">📋</div><div class="empty-title">Нет объявлений</div></div>';
+        return;
+      }
+      el.innerHTML='<div style="padding:0 12px 6px;font-size:13px;color:var(--hint);">Всего: '+data.length+'</div>'
+        +data.map(renderAdminCard).join('');
+    })
+    .catch(function(e){
+      el.innerHTML='<div class="empty"><div class="empty-ico">⚠️</div><div class="empty-title">'+(e.message==='forbidden'?'Нет доступа':'Ошибка загрузки')+'</div></div>';
+    });
+}
+
+function setAdminFilter(status){
+  _adminFilter=status;
+  ['all','active','hidden','expired'].forEach(function(f){
+    var btn=gi('afilter-'+f);
+    if(btn)btn.classList.toggle('sel',(status===''&&f==='all')||(status===f));
+  });
+  renderAdminListings();
+}
+
 function showTab(name){
   document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active');});
   document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('active');});
-  gi('screen-'+name).classList.add('active');
-  gi('tab-'+name).classList.add('active');
+  var scr=gi('screen-'+name);
+  var tab=gi('tab-'+name);
+  if(scr)scr.classList.add('active');
+  if(tab)tab.classList.add('active');
   if(name==='my')renderMyListings();
+  if(name==='admin')renderAdminListings();
 }
-showTab((new URLSearchParams(location.search)).get('tab')||'search');
+
+if(_isAdminMode){var at=gi('tab-admin');if(at)at.style.display='';}
+showTab(_urlParams.get('tab')||'search');
 </script>
 </body>
 </html>

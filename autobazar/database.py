@@ -186,6 +186,20 @@ async def mark_warning_sent(listing_id: int):
         await db.commit()
 
 
+async def get_all_listings(status: str = None) -> list:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        if status:
+            cursor = await db.execute(
+                "SELECT * FROM listings WHERE status = ? ORDER BY created_at DESC", (status,)
+            )
+        else:
+            cursor = await db.execute(
+                "SELECT * FROM listings WHERE status != 'deleted' ORDER BY created_at DESC"
+            )
+        return [dict(r) for r in await cursor.fetchall()]
+
+
 async def search_listings(make=None, model=None, price_max=None, city=None) -> list:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
