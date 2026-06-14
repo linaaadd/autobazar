@@ -7,3 +7,4 @@ __pycache__/
 autobazar_logo*.png
 car_base.jpg
 .claude/
+diag_run_as_admin.ps1

@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import html
 import io
 import json
 import logging
@@ -151,20 +152,26 @@ def _contact(listing: dict) -> str:
 def listing_caption(listing: dict) -> str:
     engine_parts = []
     if listing.get("engine"):
-        engine_parts.append(listing["engine"])
+        engine_parts.append(html.escape(listing["engine"]))
     if listing.get("turbo") and listing["turbo"] != "Атмосферный":
-        engine_parts.append(listing["turbo"])
+        engine_parts.append(html.escape(listing["turbo"]))
     engine_str = " ".join(engine_parts)
 
+    make = html.escape(listing['make'])
+    model = html.escape(listing['model'])
+    city = html.escape(listing['city'])
+    fuel = html.escape(listing['fuel'])
+    transmission = html.escape(listing['transmission'])
+
     lines = [
-        f"🚘 <b>{listing['make']} {listing['model']} · {listing['year']} г.</b>",
+        f"🚘 <b>{make} {model} · {listing['year']} г.</b>",
         "",
         f"💶 <b>{listing['price']:,} €</b>",
         "",
-        f"📍 <a href=\"https://maps.google.com/maps?q={quote(listing['city'] + ', Netherlands')}\">{listing['city']}</a>",
+        f"📍 <a href=\"https://maps.google.com/maps?q={quote(listing['city'] + ', Netherlands')}\">{city}</a>",
         f"🛣 Пробег: {listing['mileage']:,} км",
-        f"⛽ Топливо: {listing['fuel']}",
-        f"⚙️ КПП: {listing['transmission']}",
+        f"⛽ Топливо: {fuel}",
+        f"⚙️ КПП: {transmission}",
     ]
     if engine_str:
         lines.append(f"🔧 Двигатель: {engine_str}")
@@ -172,7 +179,7 @@ def listing_caption(listing: dict) -> str:
     footer = f"\n▬▬▬▬▬▬▬▬▬▬▬▬▬▬\n\n📲 Контакт: {_contact(listing)}"
     header = "\n".join(lines) + "\n\n▬▬▬▬▬▬▬▬▬▬▬▬▬▬\n\n"
     max_desc = 1024 - len(header) - len(footer)
-    desc = listing['description']
+    desc = html.escape(listing['description'])
     if len(desc) > max_desc:
         desc = desc[:max_desc - 1] + "…"
     return header + desc + footer
@@ -296,7 +303,7 @@ def _build_listings_view(items: list) -> tuple[str, InlineKeyboardMarkup]:
             icon, status_str = "✅", f"ещё {days_left} дн."
         else:
             icon, status_str = "⏰", "истекло"
-        text += f"{icon} <b>#{item['id']}</b> — {item['make']} {item['model']} {item['year']} — {item['price']:,} EUR ({status_str})\n"
+        text += f"{icon} <b>#{item['id']}</b> — {html.escape(item['make'])} {html.escape(item['model'])} {item['year']} — {item['price']:,} EUR ({status_str})\n"
         hide_btn = (
             InlineKeyboardButton(f"👁 Показать #{item['id']}", callback_data=f"unhide_{item['id']}")
             if item["status"] == "hidden"
@@ -380,7 +387,7 @@ async def delete_listing_ask(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return
 
     await query.edit_message_text(
-        f"🗑 Удалить объявление <b>#{listing_id} — {listing['make']} {listing['model']} {listing['year']}</b>?\n\n"
+        f"🗑 Удалить объявление <b>#{listing_id} — {html.escape(listing['make'])} {html.escape(listing['model'])} {listing['year']}</b>?\n\n"
         "Объявление будет снято с публикации.",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([
@@ -505,7 +512,7 @@ async def edit_listing_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
     context.user_data["editing_listing_id"] = listing_id
     await query.edit_message_text(
         f"✏️ <b>Редактирование #{listing_id}</b>\n"
-        f"{listing['make']} {listing['model']} {listing['year']}\n\n"
+        f"{html.escape(listing['make'])} {html.escape(listing['model'])} {listing['year']}\n\n"
         "Что изменить?",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup([
@@ -532,7 +539,7 @@ async def edit_choose_field(update: Update, context: ContextTypes.DEFAULT_TYPE):
         listing_id = context.user_data.get("editing_listing_id")
         listing = await get_listing(listing_id)
         await query.edit_message_text(
-            f"📝 Текущее описание:\n<i>{listing['description']}</i>\n\nВведите новое описание:",
+            f"📝 Текущее описание:\n<i>{html.escape(listing['description'])}</i>\n\nВведите новое описание:",
             parse_mode="HTML",
         )
         return EDIT_DESCRIPTION
@@ -582,7 +589,7 @@ async def edit_description_handler(update: Update, context: ContextTypes.DEFAULT
     context.user_data["edit_original_desc"] = text
     await update.message.reply_text(
         "📝 <b>Новое описание:</b>\n\n"
-        f"<i>{text}</i>",
+        f"<i>{html.escape(text)}</i>",
         parse_mode="HTML",
         reply_markup=_edit_desc_keyboard(ai_done=False),
     )
@@ -619,7 +626,7 @@ async def edit_desc_ai_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         improved = current_desc
     await query.edit_message_text(
         "✨ <b>AI улучшило описание:</b>\n\n"
-        f"<i>{improved}</i>",
+        f"<i>{html.escape(improved)}</i>",
         parse_mode="HTML",
         reply_markup=_edit_desc_keyboard(ai_done=True),
     )
@@ -633,7 +640,7 @@ async def edit_desc_revert_ai_handler(update: Update, context: ContextTypes.DEFA
     context.user_data["edit_new_desc"] = original
     await query.edit_message_text(
         "↩️ <b>Оригинальное описание:</b>\n\n"
-        f"<i>{original}</i>",
+        f"<i>{html.escape(original)}</i>",
         parse_mode="HTML",
         reply_markup=_edit_desc_keyboard(ai_done=False),
     )
@@ -1105,7 +1112,15 @@ async def handle_webapp_data(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await update_listing_field(listing_id, "price", int(new_price))
         if new_desc:
             await update_listing_field(listing_id, "description", new_desc)
-        await update.message.reply_text("✅ Объявление обновлено.", reply_markup=kb)
+        listing = await get_listing(listing_id)
+        if listing.get("status") == "active":
+            old_ids = json.loads(listing.get("channel_message_ids") or "[]")
+            await delete_from_channel(context, old_ids)
+            msg_ids, wm_ids = await post_to_channel(context, listing)
+            await update_listing_channel_msgs(listing_id, msg_ids)
+            if wm_ids:
+                await update_listing_watermarked_photos(listing_id, wm_ids)
+        await update.message.reply_text("✅ Объявление обновлено и переопубликовано.", reply_markup=kb)
 
     else:
         await update.message.reply_text("⚠️ Неизвестное действие.", reply_markup=kb)
