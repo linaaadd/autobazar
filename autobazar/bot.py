@@ -54,7 +54,11 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 CHANNEL_ID = os.getenv("CHANNEL_ID")
 WEBAPP_URL = os.getenv("WEBAPP_URL", "").rstrip("/")
 WEBAPP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "webapp")
-ADMIN_ID = int(os.getenv("ADMIN_ID", 0))
+try:
+    ADMIN_ID = int(os.getenv("ADMIN_ID", 0))
+except ValueError:
+    ADMIN_ID = 0
+    logger.warning("ADMIN_ID не является числом — панель модератора отключена")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
