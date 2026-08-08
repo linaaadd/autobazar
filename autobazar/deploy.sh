@@ -54,14 +54,17 @@ if [ "$PROFILE" = "caddy" ]; then
 	IP="$(curl -fsS --max-time 10 https://api.ipify.org)" || die "could not determine the public IP"
 	HOST="${IP//./-}.sslip.io"
 
-	if ! grep -qE '^SITE_ADDRESS=.+' .env; then
-		say "SITE_ADDRESS -> $HOST"
-		sed -i "s|^SITE_ADDRESS=.*|SITE_ADDRESS=$HOST|" .env
-	fi
-	if ! grep -qE '^WEBAPP_URL=https://.+' .env || grep -qE '^WEBAPP_URL=https://your-' .env; then
-		say "WEBAPP_URL -> https://$HOST"
-		sed -i "s|^WEBAPP_URL=.*|WEBAPP_URL=https://$HOST|" .env
-	fi
+	# Both must track the VM's current public IP, so they are rewritten rather
+	# than filled in only when blank — a .env carried over from Railway still
+	# holds the dead *.up.railway.app URL.
+	for kv in "SITE_ADDRESS=$HOST" "WEBAPP_URL=https://$HOST"; do
+		key="${kv%%=*}"
+		grep -qF "$kv" .env && continue
+		say "$key -> ${kv#*=}"
+		grep -qE "^$key=" .env \
+			&& sed -i "s|^$key=.*|$kv|" .env \
+			|| printf '%s\n' "$kv" >> .env
+	done
 else
 	grep -qE '^TUNNEL_TOKEN=.+' .env || die "TUNNEL_TOKEN is empty in .env"
 	grep -qE '^WEBAPP_URL=https://.+' .env || die "WEBAPP_URL is empty in .env"
