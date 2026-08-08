@@ -44,10 +44,15 @@ docker info >/dev/null 2>&1 || DOCKER="sudo docker"
 # --- HTTPS setup -----------------------------------------------------------
 if [ "$PROFILE" = "caddy" ]; then
 	say "Opening ports 80/443 in the local firewall"
-	# The VCN security list must allow them too — that part is console-only.
+	# Oracle's Ubuntu image ends the INPUT chain with a blanket REJECT, so an
+	# ACCEPT appended after it never matches. Insert ahead of that rule, and
+	# drop any earlier copy that landed in the wrong place.
 	for port in 80 443; do
-		sudo iptables -C INPUT -m state --state NEW -p tcp --dport "$port" -j ACCEPT 2>/dev/null \
-			|| sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport "$port" -j ACCEPT
+		while sudo iptables -C INPUT -m state --state NEW -p tcp --dport "$port" -j ACCEPT 2>/dev/null; do
+			sudo iptables -D INPUT -m state --state NEW -p tcp --dport "$port" -j ACCEPT
+		done
+		pos=$(sudo iptables -L INPUT -n --line-numbers | awk '$2=="REJECT"{print $1; exit}')
+		sudo iptables -I INPUT "${pos:-1}" -m state --state NEW -p tcp --dport "$port" -j ACCEPT
 	done
 	sudo netfilter-persistent save >/dev/null
 
@@ -57,6 +62,9 @@ if [ "$PROFILE" = "caddy" ]; then
 	# Both must track the VM's current public IP, so they are rewritten rather
 	# than filled in only when blank — a .env carried over from Railway still
 	# holds the dead *.up.railway.app URL.
+	# A .env copied from Windows often has no trailing newline; appending to it
+	# would glue the new variable onto the last one.
+	[ -s .env ] && [ -n "$(tail -c1 .env)" ] && printf '\n' >> .env
 	for kv in "SITE_ADDRESS=$HOST" "WEBAPP_URL=https://$HOST"; do
 		key="${kv%%=*}"
 		grep -qF "$kv" .env && continue
