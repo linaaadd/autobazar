@@ -14,13 +14,47 @@ NAME="autobazar"
 PUBKEY='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICAKZm1yFaZJFfSRQ8pJHAp+zxP+whwqS+CYeivNCAGT autobazar-oracle'
 C="${OCI_TENANCY:?run this inside OCI Cloud Shell}"
 
+say() { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
+
+# --- swap the ephemeral public IP for a reserved one -----------------------
+# An ephemeral address is released when the instance is stopped, which would
+# break WEBAPP_URL. Oracle cannot convert one in place, so the address changes
+# here: create the reserved IP first, and only then release the ephemeral one,
+# so a failure never leaves the instance with no address at all.
+if [ "$MODE" = "reserve-ip" ]; then
+	ID=$(oci compute instance list -c "$C" --all \
+		| jq -r --arg n "$NAME" '[.data[]|select(."display-name"==$n and .["lifecycle-state"]=="RUNNING")][0].id')
+	VNIC=$(oci compute instance list-vnics --instance-id "$ID" | jq -r '.data[0].id')
+	PRIV=$(oci network private-ip list --vnic-id "$VNIC" | jq -r '.data[0].id')
+	OLD_IP=$(oci compute instance list-vnics --instance-id "$ID" | jq -r '.data[0]["public-ip"]')
+
+	RESERVED=$(oci network public-ip list -c "$C" --scope REGION --all \
+		| jq -r --arg n "$NAME-ip" '[.data[]|select(."display-name"==$n)][0].id // empty')
+	if [ -z "$RESERVED" ]; then
+		say "Creating a reserved public IP"
+		RESERVED=$(oci network public-ip create -c "$C" --lifetime RESERVED \
+			--display-name "$NAME-ip" --wait-for-state AVAILABLE | jq -r '.data.id')
+	fi
+
+	if [ -n "$OLD_IP" ] && [ "$OLD_IP" != null ]; then
+		EPH=$(oci network public-ip get-by-ip-address -c "$C" --ip-address "$OLD_IP" | jq -r '.data.id')
+		say "Releasing the ephemeral address $OLD_IP"
+		oci network public-ip delete --public-ip-id "$EPH" --force >/dev/null
+	fi
+
+	say "Assigning the reserved address"
+	NEW_IP=$(oci network public-ip update --public-ip-id "$RESERVED" --private-ip-id "$PRIV" \
+		--wait-for-state ASSIGNED | jq -r '.data["ip-address"]')
+	echo "reserved IP: $NEW_IP"
+	echo "next: ssh in and re-run ./deploy.sh caddy so the URLs follow the new address"
+	exit 0
+fi
+
 case "$MODE" in
 	a1)    SHAPE="VM.Standard.A1.Flex"; SHAPE_CFG='{"ocpus":1,"memoryInGBs":6}' ;;
 	micro) SHAPE="VM.Standard.E2.1.Micro"; SHAPE_CFG="" ;;
-	*)     echo "usage: $0 [a1|micro]" >&2; exit 1 ;;
+	*)     echo "usage: $0 [a1|micro|reserve-ip]" >&2; exit 1 ;;
 esac
-
-say() { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
 
 # --- already done? ---------------------------------------------------------
 EXISTING=$(oci compute instance list -c "$C" --all \
