@@ -44,23 +44,43 @@
 
 ```
 autobazar/
-├── bot.py           # main bot + web server (aiohttp)
-├── database.py      # SQLite via aiosqlite
+├── bot.py             # main bot + web server (aiohttp)
+├── database.py        # SQLite via aiosqlite
 ├── requirements.txt
-├── railway.toml     # Railway deployment config
-├── .env.example     # environment variables template
+├── Dockerfile         # runtime image
+├── docker-compose.yml # bot + one of two HTTPS front ends
+├── Caddyfile          # reverse proxy, automatic Let's Encrypt
+├── deploy.sh          # one-shot deploy on a fresh VM
+├── oci-bootstrap.sh   # Oracle Cloud: network, instance, reserved IP
+├── DEPLOY.md          # full deployment walkthrough
+├── .env.example       # environment variables template
 └── webapp/
-    └── index.html   # Telegram Mini App (user + moderator)
+    └── index.html     # Telegram Mini App (user + moderator)
 ```
 
 ---
 
-## Deploy on Railway
+## Deployment
 
-1. Create a project on [railway.app](https://railway.app)
-2. Set Root Directory: `autobazar`
-3. Add environment variables (see below)
-4. Railway runs `python bot.py` automatically
+The bot needs three things at once: a process that never sleeps (long polling),
+a persistent disk for the SQLite database, and a public HTTPS URL with a valid
+certificate — Telegram Mini Apps reject anything else. It runs on an Oracle
+Cloud Always Free VM under Docker Compose.
+
+```bash
+git clone https://github.com/linaaadd/autobazar.git
+cd autobazar/autobazar
+cp .env.example .env    # fill in the values
+./deploy.sh caddy
+```
+
+`deploy.sh` installs Docker, opens the firewall, derives the public hostname
+from the machine's IP, builds and starts everything, and waits for the health
+check. Two HTTPS options: `caddy` needs no domain (it serves over
+`<ip-with-dashes>.sslip.io`), `tunnel` routes through a Cloudflare Tunnel and
+opens no inbound ports at all.
+
+See [DEPLOY.md](autobazar/DEPLOY.md) for provisioning the machine itself.
 
 ## Environment Variables
 
@@ -68,7 +88,7 @@ autobazar/
 TELEGRAM_TOKEN=       # token from @BotFather
 ANTHROPIC_API_KEY=    # Anthropic API key
 CHANNEL_ID=           # @username or -100... of the channel
-WEBAPP_URL=           # public Railway service URL
+WEBAPP_URL=           # public HTTPS URL (deploy.sh fills this in)
 ADMIN_ID=             # owner's numeric Telegram ID (for /mod panel)
 ```
 
@@ -135,23 +155,42 @@ python bot.py
 
 ```
 autobazar/
-├── bot.py           # основной бот + веб-сервер (aiohttp)
-├── database.py      # SQLite через aiosqlite
+├── bot.py             # основной бот + веб-сервер (aiohttp)
+├── database.py        # SQLite через aiosqlite
 ├── requirements.txt
-├── railway.toml     # Railway деплой
-├── .env.example     # шаблон переменных окружения
+├── Dockerfile         # образ для запуска
+├── docker-compose.yml # бот + один из двух вариантов HTTPS
+├── Caddyfile          # реверс-прокси, Let's Encrypt автоматом
+├── deploy.sh          # разворачивание на чистой VM одной командой
+├── oci-bootstrap.sh   # Oracle Cloud: сеть, инстанс, резервный IP
+├── DEPLOY.md          # полная инструкция по деплою
+├── .env.example       # шаблон переменных окружения
 └── webapp/
-    └── index.html   # Telegram Mini App (пользователь + модератор)
+    └── index.html     # Telegram Mini App (пользователь + модератор)
 ```
 
 ---
 
-## Деплой на Railway
+## Деплой
 
-1. Создать проект на [railway.app](https://railway.app)
-2. Root Directory: `autobazar`
-3. Добавить переменные окружения (см. ниже)
-4. Railway сам запустит `python bot.py`
+Боту нужны три вещи одновременно: процесс, который не засыпает (long polling),
+постоянный диск под SQLite и публичный HTTPS с валидным сертификатом —
+Telegram Mini App не принимает ничего другого. Работает на Oracle Cloud
+Always Free под Docker Compose.
+
+```bash
+git clone https://github.com/linaaadd/autobazar.git
+cd autobazar/autobazar
+cp .env.example .env    # заполнить значения
+./deploy.sh caddy
+```
+
+`deploy.sh` ставит Docker, открывает порты, вычисляет публичный адрес машины,
+собирает и запускает всё и дожидается healthcheck. Два варианта HTTPS: `caddy`
+не требует домена (отдаёт на `<ip-через-дефисы>.sslip.io`), `tunnel` работает
+через Cloudflare Tunnel и не открывает наружу ни одного порта.
+
+Как поднять саму машину — [DEPLOY.md](autobazar/DEPLOY.md).
 
 ## Переменные окружения
 
@@ -159,7 +198,7 @@ autobazar/
 TELEGRAM_TOKEN=       # токен от @BotFather
 ANTHROPIC_API_KEY=    # ключ Anthropic API
 CHANNEL_ID=           # @username или -100... канала
-WEBAPP_URL=           # публичный URL сервиса (Railway URL)
+WEBAPP_URL=           # публичный HTTPS-адрес (заполняет deploy.sh)
 ADMIN_ID=             # числовой Telegram ID владельца (для /mod)
 ```
 

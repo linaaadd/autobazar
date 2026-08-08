@@ -1,117 +1,107 @@
-# Deploying AutoBazar on an Oracle Cloud Always Free VM
+# Deploying AutoBazar on Oracle Cloud Always Free
 
-Replaces the previous Railway deployment. The bot needs three things a free
-PaaS usually will not give at once: an always-on process (long polling), a
+Replaces the previous Railway deployment. The bot needs three things at once,
+and no free PaaS offers all three: an always-on process (long polling), a
 persistent disk (SQLite at `/data`), and a public HTTPS URL with a valid
-certificate (Telegram Mini Apps refuse anything else).
+certificate — Telegram Mini Apps refuse anything else.
 
-## 1. Create the VM
+## 1. Create the tenancy
 
-Oracle Cloud → Compute → Instances → Create instance.
+Sign up at [cloud.oracle.com](https://cloud.oracle.com). A card is required for
+identity verification; Always Free resources are never charged. The **home
+region is permanent and cannot be changed later**, and Always Free compute only
+exists in it — pick the one you actually want.
 
-- Image: **Ubuntu 24.04 (aarch64)**
-- Shape: **VM.Standard.A1.Flex**, 2 OCPU / 12 GB
-  (the Always Free ceiling since 15 June 2026 — 1 OCPU / 6 GB is plenty here)
-- Boot volume: 50 GB
-- Save the SSH public key, and note the public IPv4 address
+## 2. Network and instance
 
-If the console answers `Out of host capacity`, the region has no free A1 stock
-at that moment. Retry later, or pick another availability domain.
-
-Reserve the IP so it survives a stop/start: Networking → Reserved public IPs →
-attach to the instance VNIC. A changing IP breaks `WEBAPP_URL`.
-
-## 2. Open the ports (Caddy profile only)
-
-Two separate firewalls have to agree. Missing the second one is the classic
-"the security list is open but nothing connects" trap.
-
-VCN → Security Lists → default → add ingress rules:
-`0.0.0.0/0` → TCP `80` and TCP `443`.
-
-Then on the instance itself:
+Everything below runs in **Cloud Shell** (the `>_` icon in the console), where
+the OCI CLI is already authenticated — no API keys to set up.
 
 ```bash
-sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 80 -j ACCEPT
-sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 443 -j ACCEPT
-sudo netfilter-persistent save
+git clone https://github.com/linaaadd/autobazar.git ~/ab
+bash ~/ab/autobazar/oci-bootstrap.sh a1
 ```
 
-The Cloudflare Tunnel profile needs neither step — the tunnel dials outbound.
+This creates the VCN, internet gateway, route, public subnet and security
+rules for 22/80/443, then launches `VM.Standard.A1.Flex` (1 OCPU / 6 GB),
+retrying once a minute for as long as it takes. It is idempotent — re-running
+reuses whatever already exists.
 
-## 3. Fast path — one script
+Clone rather than `curl` the raw URL: raw.githubusercontent caches for several
+minutes, so a freshly pushed fix is silently not the one you run.
 
-`deploy.sh` does everything the rest of this document describes by hand:
-installs Docker, opens the local firewall, derives the sslip.io hostname from
-the VM's public IP, writes it into `.env`, builds, starts, and waits for the
-health check. Re-running it is safe.
+### When A1 has no capacity
+
+`Out of host capacity` for Ampere is routine in busy regions, and it is a stock
+problem, not an account problem. Amsterdam has a single availability domain, so
+there is no second AD to fall back to, and the region cannot be changed.
+
+The other Always Free shape is x86 and almost always available:
+
+```bash
+bash ~/ab/autobazar/oci-bootstrap.sh micro     # VM.Standard.E2.1.Micro, 1 GB
+```
+
+1 GB is enough — the bot idles around 250 MB — but add swap for the Pillow
+spikes during watermarking. `deploy.sh` does not do this; run it once:
+
+```bash
+sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile
+sudo mkswap /swapfile && sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+```
+
+## 3. Reserve the public IP
+
+A launched instance gets an **ephemeral** address, which is released when the
+instance stops — and `WEBAPP_URL` dies with it. Oracle cannot convert one in
+place, so reserving deliberately changes the address:
+
+```bash
+bash ~/ab/autobazar/oci-bootstrap.sh reserve-ip
+```
+
+Do this before the first deploy, or re-run `deploy.sh` afterwards so the URLs
+follow the new address.
+
+## 4. Deploy
+
+Copy the secrets from your own machine — nothing secret lives in the repo:
+
+```bash
+scp -i ~/.ssh/oracle_autobazar autobazar/.env ubuntu@<ip>:~/.env
+```
+
+Then on the VM:
 
 ```bash
 git clone https://github.com/linaaadd/autobazar.git
-cd autobazar/autobazar
+mv ~/.env ~/autobazar/autobazar/.env
+cd ~/autobazar/autobazar && chmod +x deploy.sh && ./deploy.sh caddy
 ```
 
-Copy your secrets over from your own machine (nothing secret lives in the
-repo):
+`deploy.sh` installs Docker, opens the firewall, points `SITE_ADDRESS` and
+`WEBAPP_URL` at `<ip-with-dashes>.sslip.io`, builds, starts, and waits for the
+health check. It stops with a clear message if a variable is missing, and is
+safe to re-run.
 
-```bash
-scp autobazar/.env ubuntu@<vm-ip>:~/autobazar/autobazar/.env
-```
+### The two HTTPS options
 
-Then, on the VM:
+- **`caddy`** — no domain needed. `sslip.io` resolves a dashed IP to that IP, so
+  Caddy obtains a real Let's Encrypt certificate for it.
+- **`tunnel`** — needs a domain on Cloudflare. Create a tunnel in the Zero Trust
+  dashboard pointing at `http://bot:8080`, put its token in `TUNNEL_TOKEN`.
+  Nothing is exposed inbound, so step 5 below does not apply.
 
-```bash
-chmod +x deploy.sh && ./deploy.sh caddy     # or: ./deploy.sh tunnel
-```
+## 5. Two firewalls, not one
 
-It stops with a clear message if a required variable is missing. Sections 4–5
-below are the manual equivalent, kept for when something needs unpicking.
+This is the usual reason a correctly configured server answers nothing. Ports
+must be open in **both** the VCN security list (handled by `oci-bootstrap.sh`)
+and `iptables` on the instance (handled by `deploy.sh`).
 
-## 4. Get the code and configure
-
-```bash
-git clone https://github.com/linaaadd/autobazar.git
-cd autobazar/autobazar
-cp .env.example .env
-nano .env
-```
-
-Fill in `TELEGRAM_TOKEN`, `ANTHROPIC_API_KEY`, `CHANNEL_ID`, `ADMIN_ID`, and
-the HTTPS variables for whichever option you pick below.
-
-## 5. Pick an HTTPS option
-
-### A — Caddy + sslip.io (no domain required)
-
-`sslip.io` resolves any dashed IP to that IP, so Caddy can get a real Let's
-Encrypt certificate for it. For public IP `130.61.42.7`:
-
-```
-SITE_ADDRESS=130-61-42-7.sslip.io
-WEBAPP_URL=https://130-61-42-7.sslip.io
-```
-
-```bash
-docker compose --profile caddy up -d --build
-```
-
-### B — Cloudflare Tunnel (needs a domain on Cloudflare)
-
-Zero Trust dashboard → Networks → Tunnels → create a tunnel → add a public
-hostname (e.g. `autobazar.example.com`) pointing at `http://bot:8080`. Copy the
-connector token.
-
-```
-TUNNEL_TOKEN=eyJhIjoi...
-WEBAPP_URL=https://autobazar.example.com
-```
-
-```bash
-docker compose --profile tunnel up -d --build
-```
-
-Nothing is exposed to the internet directly, and the certificate is
-Cloudflare's.
+Oracle's Ubuntu image ends its INPUT chain with a blanket REJECT, so an ACCEPT
+rule appended after it never matches. `deploy.sh` inserts ahead of the REJECT —
+worth knowing if you ever add a port by hand.
 
 ## 6. Verify
 
@@ -120,25 +110,21 @@ docker compose logs -f bot
 curl -s https://<your-host>/health
 ```
 
-Expect `✅ AutoBazar Bot запущен!` in the logs and a healthy response from
-`/health`. Then open the bot in Telegram and press **🚗 Подать объявление** —
-if the Mini App opens, `WEBAPP_URL` is correct.
+Expect `✅ AutoBazar Bot запущен!` and `OK`. Then open the bot in Telegram and
+press **🚗 Подать объявление** — if the Mini App opens, `WEBAPP_URL` is right.
 
-## Migrating the existing database
-
-The Railway volume held `/data/autobazar.db`. To carry it over:
-
-```bash
-docker compose cp autobazar.db bot:/data/autobazar.db
-docker compose restart bot
-```
+`telegram.error.Conflict: terminated by other getUpdates request` means a second
+copy of the bot is still polling with the same token somewhere. Only one may
+run.
 
 ## Notes
 
-- `TZ=UTC` is set explicitly in the image and in compose. The daily jobs are
-  scheduled at fixed UTC times (09:00 repost, 08:00 cleanup, 10:00 expiry
-  warnings); a host in Amsterdam time would silently shift all three.
-- SQLite lives in the named volume `bot-data`, so `docker compose down` does
-  not lose listings. `docker compose down -v` does.
-- Updating: `git pull && docker compose --profile <caddy|tunnel> up -d --build`.
-- `railway.toml` is kept only for reference; it is unused here.
+- `TZ=UTC` is pinned in the image and in compose. The daily jobs run at fixed
+  UTC times (09:00 repost, 08:00 cleanup, 10:00 expiry warnings); a host on
+  Amsterdam time would silently shift all three.
+- SQLite lives in the named volume `bot-data`, so `docker compose down` keeps
+  the listings. `docker compose down -v` does not.
+- A `.env` copied from Windows usually has no trailing newline; `deploy.sh`
+  adds one before appending, or the appended variable would fuse onto the last
+  line.
+- Updating: `git pull && ./deploy.sh caddy`.
