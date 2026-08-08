@@ -28,23 +28,31 @@ if [ "$MODE" = "reserve-ip" ]; then
 	PRIV=$(oci network private-ip list --vnic-id "$VNIC" | jq -r '.data[0].id')
 	OLD_IP=$(oci compute instance list-vnics --instance-id "$ID" | jq -r '.data[0]["public-ip"]')
 
+	# --wait-for-state mixes progress text into stdout, which breaks jq, and
+	# get-by-ip-address is fussy about compartment scope. Neither is needed:
+	# a reserved IP is usable the moment it is created, and the ephemeral one
+	# can be found by walking the AD-scoped list.
 	RESERVED=$(oci network public-ip list -c "$C" --scope REGION --all \
 		| jq -r --arg n "$NAME-ip" '[.data[]|select(."display-name"==$n)][0].id // empty')
 	if [ -z "$RESERVED" ]; then
 		say "Creating a reserved public IP"
 		RESERVED=$(oci network public-ip create -c "$C" --lifetime RESERVED \
-			--display-name "$NAME-ip" --wait-for-state AVAILABLE | jq -r '.data.id')
+			--display-name "$NAME-ip" | jq -r '.data.id // empty')
 	fi
+	[ -n "$RESERVED" ] || { echo "could not create a reserved IP" >&2; exit 1; }
 
-	if [ -n "$OLD_IP" ] && [ "$OLD_IP" != null ]; then
-		EPH=$(oci network public-ip get-by-ip-address -c "$C" --ip-address "$OLD_IP" | jq -r '.data.id')
+	AD=$(oci iam availability-domain list -c "$C" | jq -r '.data[0].name')
+	EPH=$(oci network public-ip list -c "$C" --scope AVAILABILITY_DOMAIN \
+		--availability-domain "$AD" --all \
+		| jq -r --arg p "$PRIV" '[.data[]|select(."assigned-entity-id"==$p)][0].id // empty')
+	if [ -n "$EPH" ]; then
 		say "Releasing the ephemeral address $OLD_IP"
 		oci network public-ip delete --public-ip-id "$EPH" --force >/dev/null
 	fi
 
 	say "Assigning the reserved address"
-	NEW_IP=$(oci network public-ip update --public-ip-id "$RESERVED" --private-ip-id "$PRIV" \
-		--wait-for-state ASSIGNED | jq -r '.data["ip-address"]')
+	NEW_IP=$(oci network public-ip update --public-ip-id "$RESERVED" \
+		--private-ip-id "$PRIV" | jq -r '.data["ip-address"] // empty')
 	echo "reserved IP: $NEW_IP"
 	echo "next: ssh in and re-run ./deploy.sh caddy so the URLs follow the new address"
 	exit 0
