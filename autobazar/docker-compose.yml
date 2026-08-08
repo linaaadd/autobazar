@@ -1,0 +1,50 @@
+services:
+  bot:
+    build: .
+    image: autobazar-bot
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      TZ: UTC
+      PORT: 8080
+      DB_PATH: /data/autobazar.db
+    volumes:
+      - bot-data:/data
+    expose:
+      - "8080"
+
+  # HTTPS option A — no domain needed. Uses sslip.io + Let's Encrypt.
+  # Set SITE_ADDRESS=<ip-with-dashes>.sslip.io in .env, then:
+  #   docker compose --profile caddy up -d
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["caddy"]
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - bot
+
+  # HTTPS option B — needs a domain on Cloudflare. No inbound ports opened.
+  # Create a tunnel in the Zero Trust dashboard, route it to http://bot:8080,
+  # put its token in TUNNEL_TOKEN, then:
+  #   docker compose --profile tunnel up -d
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    profiles: ["tunnel"]
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN}
+    env_file: .env
+    depends_on:
+      - bot
+
+volumes:
+  bot-data:
+  caddy-data:
+  caddy-config:
