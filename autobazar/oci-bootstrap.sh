@@ -100,7 +100,9 @@ while true; do
 		echo "ssh:       ssh -i ~/.ssh/oracle_autobazar ubuntu@$IP"
 		break
 	fi
-	if ! grep -qi 'out of capacity\|outofcapacity\|LimitExceeded' /tmp/launch.err; then
+	# Oracle words this several ways ("Out of host capacity.", "Out of capacity
+	# for shape ..."), and returns it as a 500 InternalError, so match loosely.
+	if ! grep -qi 'capacity' /tmp/launch.err /tmp/launch.json; then
 		say "Launch failed for a reason other than capacity"
 		cat /tmp/launch.err
 		exit 1
