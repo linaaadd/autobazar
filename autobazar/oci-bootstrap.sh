@@ -2,8 +2,11 @@
 # Prepare the Oracle Cloud network and grab an Always Free instance.
 # Meant to be run inside OCI Cloud Shell, where the CLI is already authenticated.
 #
-#   bash oci-bootstrap.sh          # chase VM.Standard.A1.Flex (ARM, 1 OCPU / 6 GB)
-#   bash oci-bootstrap.sh micro    # take VM.Standard.E2.1.Micro (x86, 1 GB) instead
+#   bash oci-bootstrap.sh            # chase VM.Standard.A1.Flex (ARM, 1 OCPU / 6 GB)
+#   bash oci-bootstrap.sh micro      # take VM.Standard.E2.1.Micro (x86, 1 GB) instead
+#   bash oci-bootstrap.sh reserve-ip # swap the ephemeral public IP for a reserved one
+#
+# INSTANCE_NAME overrides the instance's display name; the network keeps its own.
 #
 # Idempotent: it reuses the VCN, subnet and rules it created on a previous run,
 # and exits immediately if the instance already exists.
@@ -11,6 +14,9 @@ set -uo pipefail
 
 MODE="${1:-a1}"
 NAME="${INSTANCE_NAME:-autobazar}"
+# The network is shared by every instance, so its resources keep a fixed name
+# even when INSTANCE_NAME points somewhere else.
+NET="autobazar"
 PUBKEY='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICAKZm1yFaZJFfSRQ8pJHAp+zxP+whwqS+CYeivNCAGT autobazar-oracle'
 
 # In Cloud Shell the tenancy comes from the environment. On an instance using
@@ -38,11 +44,11 @@ if [ "$MODE" = "reserve-ip" ]; then
 	# a reserved IP is usable the moment it is created, and the ephemeral one
 	# can be found by walking the AD-scoped list.
 	RESERVED=$(oci network public-ip list -c "$C" --scope REGION --all \
-		| jq -r --arg n "$NAME-ip" '[.data[]|select(."display-name"==$n)][0].id // empty')
+		| jq -r --arg n "$NET-ip" '[.data[]|select(."display-name"==$n)][0].id // empty')
 	if [ -z "$RESERVED" ]; then
 		say "Creating a reserved public IP"
 		RESERVED=$(oci network public-ip create -c "$C" --lifetime RESERVED \
-			--display-name "$NAME-ip" | jq -r '.data.id // empty')
+			--display-name "$NET-ip" | jq -r '.data.id // empty')
 	fi
 	[ -n "$RESERVED" ] || { echo "could not create a reserved IP" >&2; exit 1; }
 
@@ -81,11 +87,11 @@ fi
 AD=$(oci iam availability-domain list -c "$C" | jq -r '.data[0].name')
 
 # --- network ---------------------------------------------------------------
-VCN=$(oci network vcn list -c "$C" --all | jq -r --arg n "$NAME-vcn" '[.data[]|select(."display-name"==$n)][0].id // empty')
+VCN=$(oci network vcn list -c "$C" --all | jq -r --arg n "$NET-vcn" '[.data[]|select(."display-name"==$n)][0].id // empty')
 if [ -z "$VCN" ]; then
 	say "Creating VCN"
 	VCN=$(oci network vcn create -c "$C" --cidr-blocks '["10.0.0.0/16"]' \
-		--display-name "$NAME-vcn" --dns-label autobazar --wait-for-state AVAILABLE \
+		--display-name "$NET-vcn" --dns-label "$NET" --wait-for-state AVAILABLE \
 		| jq -r '.data.id')
 fi
 
@@ -93,7 +99,7 @@ IGW=$(oci network internet-gateway list -c "$C" --vcn-id "$VCN" --all | jq -r '.
 if [ -z "$IGW" ]; then
 	say "Creating internet gateway"
 	IGW=$(oci network internet-gateway create -c "$C" --vcn-id "$VCN" --is-enabled true \
-		--display-name "$NAME-igw" --wait-for-state AVAILABLE | jq -r '.data.id')
+		--display-name "$NET-igw" --wait-for-state AVAILABLE | jq -r '.data.id')
 fi
 
 RT=$(oci network vcn get --vcn-id "$VCN" | jq -r '.data["default-route-table-id"]')
@@ -117,7 +123,7 @@ SUBNET=$(oci network subnet list -c "$C" --vcn-id "$VCN" --all \
 if [ -z "$SUBNET" ]; then
 	say "Creating public subnet"
 	SUBNET=$(oci network subnet create -c "$C" --vcn-id "$VCN" --cidr-block 10.0.0.0/24 \
-		--display-name "$NAME-public" --dns-label public \
+		--display-name "$NET-public" --dns-label public \
 		--prohibit-public-ip-on-vnic false --wait-for-state AVAILABLE | jq -r '.data.id')
 fi
 
