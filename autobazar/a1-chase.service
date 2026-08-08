@@ -1,0 +1,21 @@
+[Unit]
+Description=Claim an Always Free Ampere A1 instance when capacity appears
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+# Authenticates as the instance itself via the autobazar-vm dynamic group, so
+# no API key is stored on disk.
+Environment=OCI_CLI_AUTH=instance_principal
+Environment=INSTANCE_NAME=autobazar-a1
+Environment=PATH=/home/ubuntu/ocienv/bin:/usr/local/bin:/usr/bin:/bin
+WorkingDirectory=/home/ubuntu/autobazar/autobazar
+ExecStart=/bin/bash oci-bootstrap.sh a1
+# The script loops internally; exiting means it either succeeded or hit a
+# non-capacity error. Either way, stop and leave the log for inspection.
+Restart=no
+
+[Install]
+WantedBy=multi-user.target

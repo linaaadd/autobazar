@@ -10,9 +10,14 @@
 set -uo pipefail
 
 MODE="${1:-a1}"
-NAME="autobazar"
+NAME="${INSTANCE_NAME:-autobazar}"
 PUBKEY='ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICAKZm1yFaZJFfSRQ8pJHAp+zxP+whwqS+CYeivNCAGT autobazar-oracle'
-C="${OCI_TENANCY:?run this inside OCI Cloud Shell}"
+
+# In Cloud Shell the tenancy comes from the environment. On an instance using
+# instance-principal auth it does not, so fall back to the metadata service.
+C="${OCI_TENANCY:-$(curl -sfH 'Authorization: Bearer Oracle' \
+	http://169.254.169.254/opc/v2/instance/ | jq -r '.compartmentId // empty')}"
+[ -n "$C" ] || { echo "no tenancy OCID: run in Cloud Shell or on an OCI instance" >&2; exit 1; }
 
 say() { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
 
