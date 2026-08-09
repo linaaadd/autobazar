@@ -155,11 +155,17 @@ while true; do
 	fi
 	# Oracle words this several ways ("Out of host capacity.", "Out of capacity
 	# for shape ..."), and returns it as a 500 InternalError, so match loosely.
-	if ! grep -qi 'capacity' /tmp/launch.err /tmp/launch.json; then
+	# A 429 is the launch endpoint's own rate limit, not a verdict on capacity —
+	# back off well past a minute or the chase spends its life being throttled.
+	if grep -qi 'capacity' /tmp/launch.err /tmp/launch.json; then
+		reason="no capacity yet"; wait=60
+	elif grep -qiE 'TooManyRequests|"status": 429' /tmp/launch.err /tmp/launch.json; then
+		reason="rate limited"; wait=300
+	else
 		say "Launch failed for a reason other than capacity"
 		cat /tmp/launch.err
 		exit 1
 	fi
-	printf '\r%s  attempt %d — no capacity yet' "$(date +%H:%M:%S)" "$n"
-	sleep 60
+	echo "$(date +%H:%M:%S)  attempt $n — $reason, retrying in ${wait}s"
+	sleep "$wait"
 done

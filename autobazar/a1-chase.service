@@ -13,9 +13,11 @@ Environment=INSTANCE_NAME=autobazar-a1
 Environment=PATH=/home/ubuntu/ocienv/bin:/usr/local/bin:/usr/bin:/bin
 WorkingDirectory=/home/ubuntu/autobazar/autobazar
 ExecStart=/bin/bash oci-bootstrap.sh a1
-# The script loops internally; exiting means it either succeeded or hit a
-# non-capacity error. Either way, stop and leave the log for inspection.
-Restart=no
+# The script loops internally, so an exit means success or an error it did not
+# recognise. Come back in ten minutes either way: on success the instance
+# already exists and the next run returns immediately.
+Restart=on-failure
+RestartSec=600
 
 [Install]
 WantedBy=multi-user.target
